@@ -1,0 +1,16 @@
+# Android and Gradle build output
+.gradle/
+**/build/
+local.properties
+
+# Signing credentials (never commit these)
+*.jks
+*.keystore
+*.p12
+**/armsx2_keystore.properties
+
+# IDE and OS files
+.idea/
+*.iml
+.DS_Store
+

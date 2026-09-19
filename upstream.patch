@@ -1,0 +1,197 @@
+diff --git a/platforms/android/app/build.gradle.kts b/platforms/android/app/build.gradle.kts
+index a84226d..09fbde6 100644
+--- a/platforms/android/app/build.gradle.kts
++++ b/platforms/android/app/build.gradle.kts
+@@ -93,6 +93,7 @@ val armsx2DiscordSdkDir: String? =
+ 
+ android {
+     namespace = "com.armsx2"
++    androidResources { noCompress += listOf("mp3", "ogg") }
+     compileSdk = 37
+     ndkVersion = armsx2NdkVersion.get()
+ 
+diff --git a/platforms/android/app/proguard-rules.pro b/platforms/android/app/proguard-rules.pro
+index 21e9dbc..6668a69 100644
+--- a/platforms/android/app/proguard-rules.pro
++++ b/platforms/android/app/proguard-rules.pro
+@@ -46,3 +46,7 @@
+ # DiscordNative's methods are bound by JNI name from libarmsx2_discord.so. R8 cannot see either
+ # link, and stripping or renaming them fails at runtime rather than at build time.
+ -keep class com.armsx2.discord.** { *; }
++
++# Black Ice WebView bridge and provider.
++-keepclassmembers class dev.aether.preview.MainActivity$LibraryBridge { @android.webkit.JavascriptInterface <methods>; }
++-keep class dev.aether.preview.SessionProvider { *; }
+diff --git a/platforms/android/app/src/main/AndroidManifest.xml b/platforms/android/app/src/main/AndroidManifest.xml
+index 0a50af1..58dd80a 100644
+--- a/platforms/android/app/src/main/AndroidManifest.xml
++++ b/platforms/android/app/src/main/AndroidManifest.xml
+@@ -42,14 +42,14 @@
+ 
+     <application
+         android:name=".Pasx2Application"
+-        android:allowBackup="true"
++        android:allowBackup="false"
+         android:dataExtractionRules="@xml/data_extraction_rules"
+         android:fullBackupContent="@xml/backup_rules"
+         android:largeHeap="true"
+-        android:icon="@mipmap/ic_launcher"
+-        android:label="@string/app_name"
++        android:icon="@drawable/ic_black_ice"
++        android:label="Black Ice"
+         android:networkSecurityConfig="@xml/network_security_config"
+-        android:roundIcon="@mipmap/ic_launcher_round"
++        android:roundIcon="@drawable/ic_black_ice"
+         android:supportsRtl="true"
+         android:isGame="true"
+         android:appCategory="game"
+@@ -57,6 +57,12 @@
+         android:allowNativeHeapPointerTagging="false"
+         tools:targetApi="31"
+         >
++        <activity android:name="dev.aether.preview.MainActivity" android:exported="true"
++            android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation"
++            android:theme="@android:style/Theme.Material.NoActionBar" android:hardwareAccelerated="true">
++            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
++        </activity>
++        <provider android:name="dev.aether.preview.SessionProvider" android:authorities="${applicationId}.blackice.session" android:exported="false"/>
+         <!-- Declare game mode support (Android 12+) — routes app through GameManager
+              performance profile so the OS scheduler and CPU/GPU governors prefer
+              big cores and peak clocks instead of throttling as a normal app. -->
+@@ -78,7 +84,7 @@
+             android:theme="@style/Theme.ARMSX2.Boot">
+             <intent-filter>
+                 <action android:name="android.intent.action.MAIN" />
+-                <category android:name="android.intent.category.LAUNCHER" />
++
+                 <category android:name="android.intent.category.GAME" />
+             </intent-filter>
+             <intent-filter>
+@@ -92,6 +98,7 @@
+ 
+         <activity
+             android:name=".Main"
++            android:process=":emulation"
+             android:launchMode="singleTop"
+             android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|density"
+             android:hardwareAccelerated="true"
+diff --git a/platforms/android/app/src/main/java/com/armsx2/LibraryMusic.kt b/platforms/android/app/src/main/java/com/armsx2/LibraryMusic.kt
+index 79b048a..9eb30f8 100644
+--- a/platforms/android/app/src/main/java/com/armsx2/LibraryMusic.kt
++++ b/platforms/android/app/src/main/java/com/armsx2/LibraryMusic.kt
+@@ -36,7 +36,7 @@ object LibraryMusic {
+     private const val CustomNameKey = "ui.libraryMusic.customName"
+     private const val DefaultVolumePercent = 15
+ 
+-    val enabled = mutableStateOf(true)
++    val enabled = mutableStateOf(false)
+ 
+     /** 0..100, backs the App-settings slider. Applied live to the running player. */
+     val volumePercent = mutableStateOf(DefaultVolumePercent)
+@@ -60,7 +60,7 @@ object LibraryMusic {
+     private var pausedForFocus = false
+ 
+     fun load() {
+-        enabled.value = MainActivityRuntime.prefs.getBoolean(EnabledKey, true)
++        enabled.value = MainActivityRuntime.prefs.getBoolean(EnabledKey, false)
+         volumePercent.value = MainActivityRuntime.prefs.getInt(VolumeKey, DefaultVolumePercent)
+         customName.value = MainActivityRuntime.prefs.getString(CustomNameKey, null)
+     }
+diff --git a/platforms/android/app/src/main/java/com/armsx2/runtime/MainActivityRuntime.kt b/platforms/android/app/src/main/java/com/armsx2/runtime/MainActivityRuntime.kt
+index 5633333..3d82fc5 100644
+--- a/platforms/android/app/src/main/java/com/armsx2/runtime/MainActivityRuntime.kt
++++ b/platforms/android/app/src/main/java/com/armsx2/runtime/MainActivityRuntime.kt
+@@ -544,7 +544,7 @@ open class MainActivityRuntime : ComponentActivity() {
+         private fun finishToLauncherIfRequested() {
+             if (quitAfterStop) {
+                 quitAfterStop = false
+-                instance?.runOnUiThread { instance?.finishAndRemoveTask() }
++                instance?.runOnUiThread { instance?.finish() }
+             }
+         }
+ 
+@@ -573,7 +573,7 @@ open class MainActivityRuntime : ComponentActivity() {
+         @JvmStatic
+         fun exitApp() {
+             if (eState.value == EmuState.STOPPED && !vmStopInProgress && !vmRunLoopActive) {
+-                instance?.runOnUiThread { instance?.finishAndRemoveTask() }
++                instance?.runOnUiThread { instance?.finish() }
+             } else {
+                 quitAfterStop = true
+                 stop()
+@@ -2549,6 +2549,16 @@ open class MainActivityRuntime : ComponentActivity() {
+                     else
+                         PlayTime.endSession()
+                 }
++                // Black Ice records actual RUNNING intervals, independent of serial identification.
++                androidx.compose.runtime.LaunchedEffect(eState.value) {
++                    blackIceSession(if (eState.value == EmuState.RUNNING) "running" else "paused")
++                    if (eState.value == EmuState.RUNNING) {
++                        while (true) {
++                            kotlinx.coroutines.delay(15000)
++                            blackIceSession("checkpoint")
++                        }
++                    }
++                }
+                 // Capture achievement progress while the game is loaded. Only the achievements panel
+                 // used to do this, so the library showed nothing for anyone who never opened it. The
+                 // core cannot be asked about a game it has not loaded, so the numbers have to be
+@@ -5167,7 +5177,16 @@ open class MainActivityRuntime : ComponentActivity() {
+         }
+     }
+ 
++    private var blackIceForeground = false
++
++    private fun blackIceSession(event: String) {
++        if (!blackIceForeground && (event == "running" || event == "checkpoint")) return
++        runCatching { contentResolver.call(android.net.Uri.parse("content://${packageName}.blackice.session"), event, null, null) }
++    }
++
+     override fun onPause() {
++        blackIceForeground = false
++        blackIceSession("paused")
+         // Take the second-display panel down with the app. A Presentation is not torn down by the
+         // activity stopping, so it otherwise stayed on the external screen while the user was off
+         // doing something else (reported).
+@@ -5211,6 +5230,8 @@ open class MainActivityRuntime : ComponentActivity() {
+ 
+     override fun onResume() {
+         super.onResume()
++        blackIceForeground = true
++        if (eState.value == EmuState.RUNNING) blackIceSession("running")
+         runCatching { com.armsx2.SecondScreen.setForeground(applicationContext, true) }
+         // Woke from a real sleep (paired with the onPause sleep chime): play the wake chime + a brief
+         // top-left "Welcome Back!". A plain background return never set wasAsleep, so this only fires
+@@ -5249,6 +5270,7 @@ open class MainActivityRuntime : ComponentActivity() {
+     }
+ 
+     override fun onDestroy() {
++        blackIceSession("paused")
+         getSystemService(android.hardware.input.InputManager::class.java)
+             ?.unregisterInputDeviceListener(inputDeviceListener)
+         // On a CONFIGURATION-driven recreate (e.g. Samsung DeX moving the activity to
+diff --git a/platforms/android/app/src/main/res/values/strings.xml b/platforms/android/app/src/main/res/values/strings.xml
+index 08de25b..a9f4ce0 100644
+--- a/platforms/android/app/src/main/res/values/strings.xml
++++ b/platforms/android/app/src/main/res/values/strings.xml
+@@ -1,3 +1,3 @@
+ <resources>
+-    <string name="app_name">ARMSX2</string>
++    <string name="app_name">Black Ice</string>
+ </resources>
+\ No newline at end of file
+diff --git a/platforms/android/gradle.properties b/platforms/android/gradle.properties
+index 6c8eccc..f067f6b 100644
+--- a/platforms/android/gradle.properties
++++ b/platforms/android/gradle.properties
+@@ -20,4 +20,8 @@ kotlin.code.style=official
+ # Enables namespacing of each library's R class so that its R class includes only the
+ # resources declared in the library itself and none from the library's dependencies,
+ # thereby reducing the size of the R class for that library
+-android.nonTransitiveRClass=true
+\ No newline at end of file
++android.nonTransitiveRClass=true
++# Black Ice standalone identity; preserve update compatibility with the launcher.
++armsx2.applicationId=dev.aether.preview
++armsx2.versionCode=6
++armsx2.versionName=1.0
