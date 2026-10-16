@@ -116,7 +116,7 @@ public class VideoEditorTest {
         for(int i=0;i<extractor.getTrackCount();i++){String mime=extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME);audio|="audio/mp4a-latm".equals(mime);video|="video/avc".equals(mime);}
         extractor.release();assertTrue(audio&&video);
         // Keep the acceptance export in test output for manual decoding / ffprobe checks.
-        File report=new File(context.getExternalFilesDir(null),"qa");report.mkdirs();java.nio.file.Files.copy(file.toPath(),new File(report,"acceptance-1080p.mp4").toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING);file.delete();
+        File report=new File(context.getFilesDir(),"qa");report.mkdirs();java.nio.file.Files.copy(file.toPath(),new File(report,"acceptance-1080p.mp4").toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING);file.delete();
     }
     @Test public void previewSeeksAfterTrimAcrossBothTracks() throws Exception {
         EditProject p=project(0);CountDownLatch ready=new CountDownLatch(1);AtomicReference<PlaybackException> error=new AtomicReference<>();AtomicReference<CompositionPlayer> ref=new AtomicReference<>();

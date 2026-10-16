@@ -2,7 +2,7 @@ name: BC-1 Android build and GPU checks
 on:
   push:
     branches: [bc-1-v0.2-ui, bc-1-v0.3-effects, bc-1-v0.4-timeline]
-    paths: ['BC-1/**', '.github/workflows/bc-1-android.yml']
+    paths: ['BC-1/**', '.github/workflows/bc-1-android.yml', '.github/scripts/bc1-*.sh']
   workflow_dispatch:
 permissions:
   contents: read
