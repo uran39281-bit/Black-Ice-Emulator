@@ -31,7 +31,7 @@ public final class PreviewProxyTest {
         File source=new File(inst.getTargetContext().getFilesDir(),"proxy-"+project.id+".png");
         Bitmap image=Bitmap.createBitmap(160,90,Bitmap.Config.ARGB_8888);image.eraseColor(0xFF2080E0);
         try(OutputStream out=new FileOutputStream(source)){image.compress(Bitmap.CompressFormat.PNG,100,out);}image.recycle();
-        EditProject.Clip clip=new EditProject.Clip();clip.image=true;clip.uri=Uri.fromFile(source).toString();clip.sourceDurationMs=1000;clip.outMs=1000;project.clips.add(clip);
+        EditProject.Clip clip=new EditProject.Clip();clip.name="Preview cache fixture";clip.image=true;clip.uri=Uri.fromFile(source).toString();clip.sourceDurationMs=1000;clip.outMs=1000;project.clips.add(clip);
         PreviewProxy proxy=new PreviewProxy(inst.getTargetContext());AtomicInteger staleCallbacks=new AtomicInteger();
         try{
             inst.runOnMainSync(()->{proxy.prepare(project,new PreviewProxy.Listener(){

@@ -1,3 +1,11 @@
+## BC-1 v1.0 — release candidate under final verification
+
+Continues the v0.2 Dual Workspace project, retaining its V1 mountain mark, dark navy panels and icy-blue accents. Phone and tablet/DeX workspaces support automatic selection and manual overrides. UI Lock, thumbnail timelines and a desktop media browser are included alongside the v0.5 keyframes, easing curves, layered audio, chroma controls and project bundles. 3D Page Curl remains excluded.
+
+The initial paused-preview issue is fixed and visually verified across phone, large wide and compact wide layouts. Image/multilayer projects prepare a cancellable cached preview; playback/seek then reuse it until the project changes. Long projects take time to prepare. Single-video projects keep direct playback. Export remains H.264/AAC at 1080p through the same GLES effects graph.
+
+Final build version: `1.0.0`, code `12`. Publication remains gated on all 30 unit tests, all 17 Android tests, lint with no errors, and independent decoding of the exported MP4. Physical Snapdragon/DeX performance is not yet measured. APKs are kept separately at https://github.com/uran39281-bit/bc-1 .
+
 ## v1.0 RC2 preview reliability
 
 Image and multilayer timelines now prepare a cached preview with the same GLES effects graph used for export. Preparation shows progress and can be cancelled; once ready, playback starts paused without moving the playhead. Seeking and workspace resizing reuse the cache. An edit invalidates the cached preview. Single-video timelines retain direct playback. Complex previews take time to prepare, especially on long timelines; this is not a claim of instant real-time compositing. Source media and final 1080p export stay unchanged.
