@@ -2,6 +2,8 @@
 
 ## Active candidate: v1.0.4 export diagnostics
 
+Candidate source `ae912eec2ca3a9d4a63212ae8646646bd30c24c5`; Actions `38888011311`. Build passed36 unit tests, lint0errors30warnings. GPU job116930396936 pending. APK12039928235/build12040312524. Signed local candidate `/workspace/scratch/9d8e062dc089/deliverables/BC-1-v1.0.4.apk`, SHA256 `7e80ed1718bf84c2bf68749681c11a13c54ba9d5dbe558467316dfea1e732ffe`, retained certificate verified, code16/name1.0.4. Binary staged only in APK repo as blob `979cc875c3b5a3e73416928c84d9f0df7d28f5db`; NOT published or Library-saved. Require20 Android tests, FOUR MP4 validations and screenshots before publishing.
+
 Continue `bc-1-v1.0.4-diagnostics`. Adds Setup → Export diagnostics → Copy report with a bounded, redacted failure summary (stage, Media3 code, exception class chain; no exception messages/media paths). Last failure persists through later successes. Preparation, encoding and save failures are recorded; cancellations do not replace diagnostics. No renderer/encoder-policy change or automatic retry. New tests cover cause-chain redaction/cycles, missing-media failure cleanup followed by valid export, and actual UI clipboard copying. Three sequential exports plus recovery output must independently decode. Candidate code16/name1.0.4; do not publish until both CI jobs and screenshots pass. Local36 unit tests/Java compile and shell/diff checks pass; Android pending.
 
 ## Completed investigation evidence
