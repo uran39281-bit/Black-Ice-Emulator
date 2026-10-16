@@ -92,15 +92,19 @@ public final class CompositionFactory {
         if(!project.overlays.isEmpty()) finalEffects.add(new OverlayEffect(ImmutableList.of(new ProjectOverlay(context,project.overlays))));
         finalEffects.add(Presentation.createForWidthAndHeight(w,h,Presentation.LAYOUT_SCALE_TO_FIT));
         finalEffects.add(FrameDropEffect.createDefaultFrameDropEffect(30));
-        return new Composition.Builder(sequences).setHdrMode(Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_OPEN_GL)
-                .setVideoCompositorSettings(new VideoCompositorSettings() {
+        Composition.Builder composition=new Composition.Builder(sequences)
+                .setHdrMode(Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_OPEN_GL);
+        // Audio-only sequences do not make a multi-input video graph. Media3's
+        // single-input graph rejects custom compositor settings altogether.
+        if(videoInputs.size()>1) composition.setVideoCompositorSettings(new VideoCompositorSettings() {
                     @Override public Size getOutputSize(List<Size> sizes) { return new Size(w,h); }
                     @Override public OverlaySettings getOverlaySettings(int inputId,long timeUs) {
                         long ms=timeUs/1000; boolean active=false;
                         for(EditProject.Placement p:inputId<videoInputs.size()?videoInputs.get(inputId):List.<EditProject.Placement>of()) if(ms>=p.startMs && ms<p.endMs) {active=true;break;}
                         return new StaticOverlaySettings.Builder().setAlphaScale(active?1:0).build();
                     }
-                }).setEffects(new Effects(List.of(),finalEffects)).build();
+                });
+        return composition.setEffects(new Effects(List.of(),finalEffects)).build();
     }
     private static GainProcessor gain(float volume){return gain(volume,0,0,0);}
     private static GainProcessor gain(float volume,long duration,long fadeIn,long fadeOut) {
