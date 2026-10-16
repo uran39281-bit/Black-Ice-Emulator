@@ -19,6 +19,8 @@ import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+import java.util.HashMap;
+import java.util.Map;
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
@@ -39,6 +41,10 @@ public final class BcRenderer implements GLSurfaceView.Renderer {
     private int quadVao, quadVbo;
     private int blurProgram, compositeProgram;
     private int configuredQuality = -1;
+    private final Map<String,Integer> uniforms = new HashMap<>();
+    private final boolean[] inputDirty = {false,false};
+    private boolean blurDirty = true;
+    private float blurredIntensity = -1f;
     private long fpsStartNs = 0;
     private int frames = 0;
     private String gpuName = "Unknown GPU";
@@ -54,12 +60,16 @@ public final class BcRenderer implements GLSurfaceView.Renderer {
     /** MUST be called on the GL thread via GLSurfaceView.queueEvent(). */
     public void setInput(int slot, Bitmap bitmap) {
         if (slot < 0 || slot > 1) return;
-        sourceBitmaps[slot] = bitmap;
-        if (imageTextures[slot] != 0) GLES30.glDeleteTextures(1, new int[]{imageTextures[slot]}, 0);
-        imageTextures[slot] = upload(bitmap);
+        Bitmap previous=sourceBitmaps[slot];
+        sourceBitmaps[slot]=bitmap;
+        if(previous!=bitmap && previous!=null) previous.recycle();
+        inputDirty[slot]=true;
+        if(slot==0) blurDirty=true;
     }
 
     @Override public void onSurfaceCreated(GL10 gl, EGLConfig config) {
+        uniforms.clear();
+        blurDirty=true;
         gpuName = GLES30.glGetString(GLES30.GL_RENDERER);
         if (gpuName == null) gpuName = "Unknown GPU";
         GLES30.glDisable(GLES30.GL_DEPTH_TEST);
@@ -88,28 +98,40 @@ public final class BcRenderer implements GLSurfaceView.Renderer {
         GLES30.glVertexAttribPointer(1, 2, GLES30.GL_FLOAT, false, 16, 8);
         GLES30.glBindVertexArray(0);
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0);
-        for (int i = 0; i < 2; i++) imageTextures[i] = upload(sourceBitmaps[i]);
+        for (int i = 0; i < 2; i++) { imageTextures[i] = upload(sourceBitmaps[i]); inputDirty[i]=false; }
+        cacheUniforms(blurProgram,new String[]{"uSource","uTexelStep","uRadius"});
+        cacheUniforms(compositeProgram,new String[]{"uInputA","uInputB","uBlurredA","uProgress","uIntensity","uTransition","uEffect","uOpacity","uEasing","uInputTexel"});
         // Android may recreate the EGL context after switching apps.
         configuredQuality = -1;
         blurTextures[0] = blurTextures[1] = 0;
         blurFbos[0] = blurFbos[1] = 0;
         fpsStartNs = System.nanoTime();
         frames = 0;
+        final String name=gpuName;
+        ui.post(()->listener.onStatus(name,0,Math.round(1280*settings.renderScale()),Math.round(720*settings.renderScale())));
     }
 
     @Override public void onSurfaceChanged(GL10 gl, int width, int height) {
         surfaceWidth = Math.max(1,width);
         surfaceHeight = Math.max(1,height);
-        configuredQuality = -1;
     }
 
     @Override public void onDrawFrame(GL10 gl) {
         if (surfaceWidth <= 0 || surfaceHeight <= 0) return;
-        if (configuredQuality != settings.quality) resizeBuffers();
+        for(int i=0;i<2;i++) if(inputDirty[i]) {
+            if(imageTextures[i]!=0) GLES30.glDeleteTextures(1,new int[]{imageTextures[i]},0);
+            imageTextures[i]=upload(sourceBitmaps[i]); inputDirty[i]=false;
+        }
         int effect = settings.effect;
+        float intensity=settings.intensity;
         if (effect == 1 || effect == 2) {
-            blurPass(imageTextures[0], blurFbos[0], 1f/workWidth, 0f);
-            blurPass(blurTextures[0], blurFbos[1], 0f, 1f/workHeight);
+            int quality=settings.quality;
+            if(configuredQuality!=quality) resizeBuffers(quality);
+            if(blurDirty || blurredIntensity!=intensity) {
+            blurPass(imageTextures[0], blurFbos[0], 1f/workWidth, 0f,intensity);
+            blurPass(blurTextures[0], blurFbos[1], 0f, 1f/workHeight,intensity);
+            blurredIntensity=intensity; blurDirty=false;
+            }
         }
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0);
         GLES30.glViewport(0,0,surfaceWidth,surfaceHeight);
@@ -127,10 +149,13 @@ public final class BcRenderer implements GLSurfaceView.Renderer {
         bind(0,imageTextures[0],compositeProgram,"uInputA");
         bind(1,imageTextures[1],compositeProgram,"uInputB");
         bind(2,blurTextures[1] != 0 ? blurTextures[1] : imageTextures[0],compositeProgram,"uBlurredA");
-        GLES30.glUniform1f(GLES30.glGetUniformLocation(compositeProgram,"uProgress"), settings.progress);
-        GLES30.glUniform1f(GLES30.glGetUniformLocation(compositeProgram,"uIntensity"), settings.intensity);
-        GLES30.glUniform1i(GLES30.glGetUniformLocation(compositeProgram,"uTransition"), settings.transition);
-        GLES30.glUniform1i(GLES30.glGetUniformLocation(compositeProgram,"uEffect"), effect);
+        GLES30.glUniform1f(uniform(compositeProgram,"uProgress"), settings.progress);
+        GLES30.glUniform1f(uniform(compositeProgram,"uIntensity"), intensity);
+        GLES30.glUniform1i(uniform(compositeProgram,"uTransition"), settings.transition);
+        GLES30.glUniform1i(uniform(compositeProgram,"uEffect"), effect);
+        GLES30.glUniform1f(uniform(compositeProgram,"uOpacity"), settings.opacity);
+        GLES30.glUniform1i(uniform(compositeProgram,"uEasing"), settings.easing);
+        GLES30.glUniform2f(uniform(compositeProgram,"uInputTexel"),1f/sourceBitmaps[0].getWidth(),1f/sourceBitmaps[0].getHeight());
         drawQuad();
 
         frames++;
@@ -139,7 +164,7 @@ public final class BcRenderer implements GLSurfaceView.Renderer {
         long span = now-fpsStartNs;
         if (span >= 1_000_000_000L) {
             final int fps = (int)Math.round(frames*1_000_000_000.0/span);
-            final int bw = workWidth, bh = workHeight;
+            final int bw = Math.round(1280*settings.renderScale()), bh = Math.round(720*settings.renderScale());
             final String name = gpuName;
             ui.post(() -> listener.onStatus(name,fps,bw,bh));
             fpsStartNs = now;
@@ -147,14 +172,14 @@ public final class BcRenderer implements GLSurfaceView.Renderer {
         }
     }
 
-    private void resizeBuffers() {
+    private void resizeBuffers(int quality) {
         for (int i=0; i<2; i++) {
             if (blurTextures[i] != 0) GLES30.glDeleteTextures(1,new int[]{blurTextures[i]},0);
             if (blurFbos[i] != 0) GLES30.glDeleteFramebuffers(1,new int[]{blurFbos[i]},0);
         }
         // Bounded and aspect-correct offscreen processing, safe for mobile memory budgets.
-        workWidth = Math.max(256,Math.round(1280f*settings.renderScale()));
-        workHeight = Math.max(144,Math.round(720f*settings.renderScale()));
+        workWidth = Math.max(256,Math.round(1280f*(quality==0?.5f:quality==2?1f:.75f)));
+        workHeight = Math.max(144,Math.round(720f*(quality==0?.5f:quality==2?1f:.75f)));
         GLES30.glGenTextures(2,blurTextures,0);
         GLES30.glGenFramebuffers(2,blurFbos,0);
         for (int i=0; i<2; i++) {
@@ -168,24 +193,29 @@ public final class BcRenderer implements GLSurfaceView.Renderer {
         }
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER,0);
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D,0);
-        configuredQuality = settings.quality;
+        configuredQuality = quality;
+        blurDirty=true;
     }
 
-    private void blurPass(int source, int framebuffer, float dx, float dy) {
+    private void blurPass(int source, int framebuffer, float dx, float dy,float intensity) {
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER,framebuffer);
         GLES30.glViewport(0,0,workWidth,workHeight);
         GLES30.glUseProgram(blurProgram);
         bind(0,source,blurProgram,"uSource");
-        GLES30.glUniform2f(GLES30.glGetUniformLocation(blurProgram,"uTexelStep"), dx,dy);
-        GLES30.glUniform1f(GLES30.glGetUniformLocation(blurProgram,"uRadius"), .25f + 5.5f*settings.intensity);
+        GLES30.glUniform2f(uniform(blurProgram,"uTexelStep"), dx,dy);
+        GLES30.glUniform1f(uniform(blurProgram,"uRadius"), .25f + 5.5f*intensity);
         drawQuad();
     }
 
-    private static void bind(int unit, int tex, int program, String uniform) {
+    private void bind(int unit, int tex, int program, String name) {
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0+unit);
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D,tex);
-        GLES30.glUniform1i(GLES30.glGetUniformLocation(program,uniform),unit);
+        GLES30.glUniform1i(uniform(program,name),unit);
     }
+    private void cacheUniforms(int program,String[] names) {
+        for(String name:names) uniforms.put(program+":"+name,GLES30.glGetUniformLocation(program,name));
+    }
+    private int uniform(int program,String name) { return uniforms.get(program+":"+name); }
     private void drawQuad() {
         GLES30.glBindVertexArray(quadVao);
         GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP,0,4);

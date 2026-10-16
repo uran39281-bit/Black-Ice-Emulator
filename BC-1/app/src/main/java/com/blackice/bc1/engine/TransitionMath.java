@@ -13,7 +13,8 @@ public final class TransitionMath {
     public static float radial(float progress, float u, float v) {
         if (progress <= 0f) return 0f;
         if (progress >= 1f) return 1f;
-        float r = (float)Math.sqrt((u-.5f)*(u-.5f) + (v-.5f)*(v-.5f));
-        return clamp01((progress*.75f - r)*40f + .5f);
+        float dx=(u-.5f)*16f/9f;
+        float r = (float)Math.sqrt(dx*dx + (v-.5f)*(v-.5f));
+        return clamp01((progress*1.03f - r)*40f + .5f);
     }
 }

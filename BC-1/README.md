@@ -1,37 +1,60 @@
-# BC-1 Engine v0.2.0 — Dual Workspace Preview
+# BC-1 v0.3.0 — Dual Workspace / GPU Effects
 
-BC-1 is an original Android OpenGL ES 3.0 effects engine testbed for Snapdragon 8 Gen 3-class phones. The V0.2 update introduces the **Black Ice V1-inspired dual workspace**, based on supplied phone and Samsung DeX reference images.
+Continues v0.2 at `ad4ac82` on `bc-1-v0.3-effects`. The previous development branch and emulator overlay remain unchanged.
 
-## User-selectable and automatic layouts
+BC-1 is an original Android **OpenGL ES 3.0 still-image effects lab**, designed for Snapdragon 8 Gen 3-class devices. The official Black Ice V1 direction remains: dark panels, icy-blue accents, a central monitor, timeline, media panel and inspector. The workspace adapts to the window; it never stretches images to fill the screen.
 
-- **Auto** (default): selects Phone UI for narrow portrait windows and Wide UI for sufficiently large landscape/tablet/DeX windows. Uses current window dimensions, smallest screen width (tablet detection), and external-display context. A rotated ordinary phone stays in Phone UI in Auto mode; DeX resizes can trigger layout changes.
-- **Phone**: portrait-oriented, scrollable single-column interface, preview + demo timeline + bottom tools navigation.
-- **Wide**: tablet/DeX-oriented editor chrome with left media bin, center preview, right inspector, and bottom demo timeline.
-- Selection is saved in app preferences. Tap **LAYOUT** in the top bar, or choose Settings → Choose UI Layout.
-- To avoid unusable controls, a *requested* wide layout temporarily displays Phone UI on narrow windows; the choice is retained and becomes Wide when the window is wide enough.
-- Neither layout changes the **16:9 image composition**, FBO resolution preset, or an eventual export resolution. Workspace ratio is not project ratio.
+## Workspaces
 
-## Actually interactive in v0.2
+- **Auto:** phone workspace on ordinary phones, including rotation; wide workspace on sufficiently wide tablets/external displays. Resizing can change the active workspace.
+- **Phone:** optimized for 9:16 portrait, with a pinned monitor and timeline, scrolling parameters and persistent bottom navigation. Short landscape windows scroll the content safely.
+- **Wide:** optimized for 16:9 tablets/DeX. Below 1100 dp, the media column folds away; the Media tab still imports both images. Timeline height adapts to short windows.
+- Explicit Phone/Wide selections persist. A requested Wide mode falls back in narrow windows and resumes when sufficient room returns.
+- Android system bars/cutouts receive insets. Primary controls have at least 48 dp touch targets. Switching tool tabs keeps the GPU surface attached.
 
-- Import image A and B, keep images and transition progress during layout switches and window resize.
-- Four original GPU transitions: Dissolve, Directional Wipe, Checker Dissolve, Radial Reveal.
-- Image A processing: Gaussian Blur, Glow/Bloom, Green Chroma Key, Grayscale, Opacity.
-- Play/pause, touch-scrub demo timeline, effect intensity and processing quality selectors.
-- DeX/keyboard testing: Space plays/pauses, Left/Right arrows scrub the transition by 2.5%.
-- GPU name, approximate FPS, offscreen processing size.
+Workspace layout is independent from the currently fixed **16:9 composition**. This release does not add project aspect-ratio selection or export resolution settings.
 
-## Known limitations
+## GPU engine
 
-The timeline is a **non-editable demonstrator showing 2 still inputs**. There is no video decoder/encoder, multilayer editing, audio, project persistence, or MP4 export yet. Layouts are inspired by user-supplied mockups, not pixel-identical copies. 3D Page Curl is deferred. The RTX 4050 desktop backend is future work and is not contained here.
+Seven transitions: Dissolve, Directional Wipe, Checker Dissolve, Radial Reveal, **Slide Left, Zoom Dissolve, Dip to Black**. Linear and smooth motion curves. Transition endpoints explicitly resolve to A and B.
 
-## Build
+Effects on input A: Gaussian Blur, Glow/Bloom, green Chroma Key, Grayscale, legacy Opacity, **Vignette, Sharpen, Pixelate, Exposure, Saturation and Ice Grade**, plus None. A separate 0–100% opacity parameter works with every effect. Exposure and saturation are neutral at 50%; the other effect strengths increase from 0% (chroma key controls tolerance).
 
-Android Gradle Plugin 8.7.3, Gradle 8.9, Java 17, Android SDK 35.
+- On-demand rendering when paused; approximately 30 requested preview frames/second during playback.
+- Blur is separable and cached until image A, intensity, quality or EGL context changes.
+- Blur FBOs allocate only when needed, at 640×360 / 960×540 / 1280×720.
+- Window resizing does not reallocate resolution-independent blur targets.
+- Shader uniforms are resolved once per EGL context, not queried from the driver each frame.
+- Bitmap decoding and local image saves run off the UI thread. Android 9+ imports use ImageDecoder for orientation handling. Inputs are fitted to a bounded 1024×576 canvas.
+- These are architectural optimizations, **not Snapdragon performance measurements**. Real Adreno GPU, thermal, battery and DeX checks remain necessary.
 
+## Session recovery
+
+Latest input A/B images are atomically saved in private app storage. Effect, transition, opacity, quality, progress and motion curve restore on reopening. Existing `bc1-workspace` preferences and v0.2 parameter IDs stay compatible. Invalid restored values are bounded before use. This is one recoverable session, **not named project management**.
+
+Keyboard: Space plays/pauses; Left/Right scrub 2.5%; Home/End seek endpoints; Ctrl+1–4 select tool tabs. Focused controls retain native keyboard navigation. Touch/mouse timeline scrubbing pauses playback.
+
+## Portable boundaries
+
+`engine/EngineSettings.java` is Android-independent and defines stable parameter IDs/ranges. GLSL files contain the effect and transition kernels. `BcRenderer` owns GLES textures, FBOs, context recreation and upload; `WorkbenchActivity` owns Android input/lifecycle and UI. A future RTX 4050 backend can reuse the parameter contract and port the shader kernels, replacing Android/GLES resource handling. No desktop or RTX backend is included.
+
+## Build and checks
+
+Java 17, Gradle 8.9, Android Gradle Plugin 8.7.3, SDK 35, minimum Android 8.0 / GLES 3.0.
+
+```sh
+cd BC-1
+gradle testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+# With an Android GLES 3-capable device or emulator connected:
+gradle connectedDebugAndroidTest
 ```
-gradle testDebugUnitTest assembleDebug
-```
 
-When checked out as `Black-Ice-Emulator/BC-1`, run `cd BC-1` first. On GitHub, `.github/workflows/build-android.yml` builds a debug APK artifact on pushes to `bc-1-v0.2-ui`.
+The workflow `.github/workflows/bc-1-android.yml` builds the APK, unit tests and lint reports, and runs instrumentation tests on an API 35 emulator. GPU tests execute the **production renderer/shaders**, checking all transitions at both endpoints, all effects across quality/strength combinations, opacity, dip midpoint, blur orientation, source replacement and EGL context recreation. Emulator results do not establish device performance.
 
-License/provenance: BC-1 application source and shaders are independently authored. No extracted proprietary Alight Motion resources are distributed.
+Debug APK upgrades require the same signing certificate as the installed APK. Do not uninstall an older build to bypass a signature mismatch without preserving its data. CI generates an ephemeral debug certificate; distribute a consistently signed local APK for repeated testing. Signing keys must never be committed.
+
+## Deferred
+
+No video decode/encode, editable multilayer timeline, audio, named projects, MP4 export, 3D Page Curl, or RTX backend. The timeline intentionally represents two still inputs.
+
+License/provenance: independently authored BC-1 application and shaders; no proprietary Alight Motion resources are distributed.

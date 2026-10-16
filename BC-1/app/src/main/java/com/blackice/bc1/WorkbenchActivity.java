@@ -7,6 +7,11 @@ import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.ImageDecoder;
+import android.os.Build;
+import android.content.SharedPreferences;
+import android.util.AtomicFile;
+import android.content.res.ColorStateList;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -38,6 +43,11 @@ import android.widget.Toast;
 import com.blackice.bc1.engine.BcRenderer;
 import com.blackice.bc1.engine.EngineSettings;
 import java.io.IOException;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.util.ArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.io.InputStream;
 import java.util.Locale;
 
@@ -70,6 +80,11 @@ public final class WorkbenchActivity extends Activity {
     private int requestedImageSlot;
     private long lastFrameNs;
     private boolean resumed;
+    private final ExecutorService imageWorker=Executors.newSingleThreadExecutor();
+    private final ArrayList<TextView> tabButtons=new ArrayList<>();
+    private final String[] inputNames={"ICE / DEMO", "EMBER / DEMO"};
+    private boolean importing;
+    private String lastStatus="OpenGL ES 3.0 • ready";
 
     private final Runnable playback = new Runnable() {
         @Override public void run() {
@@ -82,7 +97,7 @@ public final class WorkbenchActivity extends Activity {
                 syncProgress();
             }
             lastFrameNs = now;
-            handler.postDelayed(this, 33);
+            if(playing) handler.postDelayed(this, 33);
         }
     };
 
@@ -93,6 +108,14 @@ public final class WorkbenchActivity extends Activity {
         String saved = getSharedPreferences(PREF_FILE, MODE_PRIVATE).getString(PREF_MODE, "AUTO");
         try { preference = LayoutPolicy.Preference.valueOf(saved); }
         catch (IllegalArgumentException ex) { preference = LayoutPolicy.Preference.AUTO; }
+        SharedPreferences session=getSharedPreferences(PREF_FILE,MODE_PRIVATE);
+        engine.transition=session.getInt("transition",0);
+        engine.effect=session.getInt("effect",0);
+        engine.quality=session.getInt("quality",1);
+        engine.intensity=session.getFloat("intensity",.6f);
+        engine.opacity=session.getFloat("opacity",1f);
+        engine.easing=session.getInt("easing",0);
+        engine.progress=session.getFloat("progress",0f);
         if (state != null) {
             engine.progress = state.getFloat("progress", 0f);
             engine.transition = state.getInt("transition", 0);
@@ -100,16 +123,22 @@ public final class WorkbenchActivity extends Activity {
             engine.quality = state.getInt("quality", 1);
             engine.intensity = state.getFloat("intensity", .6f);
             activeTab = state.getInt("tab", 1);
+            engine.opacity=state.getFloat("opacity",engine.opacity);
+            engine.easing=state.getInt("easing",engine.easing);
+            requestedImageSlot=state.getInt("imageSlot",0);
         }
+        engine.sanitize();
         glView = new GLSurfaceView(this);
         glView.setEGLContextClientVersion(3);
         glView.setPreserveEGLContextOnPause(true);
         renderer = new BcRenderer(this, engine, (gpu, fps, w, h) -> {
-            if (status != null) status.setText("GPU: " + gpu + "    •    " + fps + " FPS    •    " + w + "×" + h);
+            lastStatus=gpu+" • "+w+"×"+h+" blur • "+(playing?fps+" FPS":"paused");
+            if(status!=null) status.setText(lastStatus);
         });
         glView.setRenderer(renderer);
-        glView.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
+        glView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
         showWorkspace();
+        restoreInputs();
     }
 
     @Override protected void onSaveInstanceState(Bundle out) {
@@ -119,6 +148,9 @@ public final class WorkbenchActivity extends Activity {
         out.putInt("quality", engine.quality);
         out.putFloat("intensity", engine.intensity);
         out.putInt("tab", activeTab);
+        out.putFloat("opacity",engine.opacity);
+        out.putInt("easing",engine.easing);
+        out.putInt("imageSlot",requestedImageSlot);
         super.onSaveInstanceState(out);
     }
     @Override public void onConfigurationChanged(Configuration newConfig) {
@@ -135,11 +167,13 @@ public final class WorkbenchActivity extends Activity {
     @Override protected void onPause() {
         resumed = false;
         handler.removeCallbacks(playback);
+        saveSession();
         glView.onPause();
         super.onPause();
     }
     @Override protected void onDestroy() {
         handler.removeCallbacks(playback);
+        imageWorker.shutdown();
         super.onDestroy();
     }
 
@@ -156,12 +190,19 @@ public final class WorkbenchActivity extends Activity {
         play = null;
         status = null;
         panelContent = null;
+        tabButtons.clear();
         LinearLayout root = column();
         root.setBackgroundColor(BACKGROUND);
         root.addView(topBar(), height(60));
         if (next == LayoutPolicy.Workspace.WIDE) buildWide(root, width);
         else buildPhone(root);
+        root.setOnApplyWindowInsetsListener((v,insets)->{
+            v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),
+                    insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());
+            return insets.consumeSystemWindowInsets();
+        });
         setContentView(root);
+        root.requestApplyInsets();
         syncProgress();
     }
 
@@ -170,14 +211,17 @@ public final class WorkbenchActivity extends Activity {
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(dp(12), dp(3), dp(10), dp(3));
         bar.setBackground(makeBackground(0xFF101A29, 0xFF0B131E, 0, 0));
-        TextView mark = text("❄", 26, CYAN, true);
+        TextView mark = text("△", 30, CYAN, true);
         bar.addView(mark, width(38));
         LinearLayout brand = column();
         brand.addView(text("BLACK ICE EDITOR", 15, TEXT, true));
-        brand.addView(text("BC-1 ENGINE LAB  /  v0.2", 9, MUTED, false));
+        brand.addView(text("BC-1 ENGINE LAB  /  v0.3", 9, MUTED, false));
         bar.addView(brand, rowWeight(1));
         modeText = text(preference.name()+"  ▾", 11, CYAN, true);
         modeText.setPadding(dp(8), dp(10), dp(8), dp(10));
+        modeText.setMinHeight(dp(48));
+        modeText.setContentDescription("Choose workspace layout");
+        modeText.setFocusable(true);
         modeText.setBackground(makeBackground(PANEL_LIGHT, PANEL, 9, 0xFF246999));
         modeText.setOnClickListener(v -> selectWorkspace());
         bar.addView(modeText);
@@ -185,28 +229,33 @@ public final class WorkbenchActivity extends Activity {
     }
 
     private void buildPhone(LinearLayout root) {
-        ScrollView scroll = scroll();
-        scroll.setFillViewport(false);
-        LinearLayout content = column();
-        content.setPadding(dp(10), dp(10), dp(10), dp(8));
-        scroll.addView(content);
-        root.addView(scroll, columnWeight(1));
-        content.addView(headerLine("PREVIEW  ·  16:9 COMPOSITION", "PHONE WORKSPACE"));
-        View preview = preview();
-        content.addView(preview, matchWrap());
+        int heightDp=getResources().getConfiguration().screenHeightDp;
+        LinearLayout content=column();
+        content.setPadding(dp(10),dp(6),dp(10),dp(4));
+        // On short landscape phone windows all content can scroll. Portrait pins the monitor.
+        boolean shortWindow=heightDp<540;
+        if(shortWindow) {
+            ScrollView whole=scroll(); whole.addView(content);
+            root.addView(whole,columnWeight(1));
+        } else root.addView(content,columnWeight(1));
+        content.addView(headerLine("PROGRAM MONITOR", "16:9"));
+        FrameLayout host=new FrameLayout(this);
+        host.addView(preview(),new FrameLayout.LayoutParams(-1,-1,Gravity.CENTER));
+        content.addView(host,height(Math.max(110,Math.min(260,Math.round(heightDp*.27f)))));
         content.addView(transport());
-        content.addView(gap(10));
-        content.addView(headerLine("DEMO TIMELINE  •  A / B STILLS", "NOT VIDEO TRACKS"));
-        timeline = new TimelineView(this);
-        content.addView(timeline, height(184));
-        content.addView(gap(9));
-        content.addView(headerLine("TOOLS", "ENGINE PARAMETERS"));
-        panelContent = column();
-        content.addView(panelContent);
+        content.addView(headerLine("A / B STILL TIMELINE", "3.5 SEC"));
+        timeline=new TimelineView(this);
+        content.addView(timeline,height(heightDp<700?115:140));
+        content.addView(gap(6));
+        ScrollView tools=scroll();
+        panelContent=column();
+        panelContent.setPadding(dp(8),dp(8),dp(8),dp(12));
+        panelContent.setBackground(makeBackground(PANEL,BACKGROUND,10,0xFF244160));
+        tools.addView(panelContent);
+        content.addView(tools,shortWindow?height(240):columnWeight(1));
         populateTools();
-        status = text("GPU initializing…", 10, MUTED, false);
+        status=text(lastStatus,9,MUTED,false);
         content.addView(status);
-        content.addView(gap(8));
         LinearLayout nav = row();
         nav.setPadding(dp(6), dp(6), dp(6), dp(6));
         nav.setBackground(makeBackground(PANEL, BACKGROUND, 12, 0xFF263B53));
@@ -218,7 +267,10 @@ public final class WorkbenchActivity extends Activity {
             button.setGravity(Gravity.CENTER);
             button.setPadding(dp(2), dp(7), dp(2), dp(7));
             if (activeTab==i) button.setBackground(makeBackground(0xFF154464, 0xFF10253A, 10, 0xFF287EAB));
-            button.setOnClickListener(v -> { activeTab=index; showWorkspace(); });
+            button.setMinHeight(dp(48)); button.setFocusable(true);
+            button.setContentDescription(tabs[i]);
+            tabButtons.add(button);
+            button.setOnClickListener(v -> selectTab(index));
             nav.addView(button, rowWeight(1));
         }
         root.addView(nav, matchWrap());
@@ -230,7 +282,7 @@ public final class WorkbenchActivity extends Activity {
         LinearLayout rail = column();
         rail.setPadding(dp(5), dp(8), dp(5), 0);
         rail.setBackgroundColor(0xFF0D1928);
-        workspace.addView(rail, width(68));
+        workspace.addView(rail, width(56));
         String[] railItems={"▣\nMEDIA", "✂\nEDIT", "✧\nFX", "⚙\nSET"};
         for (int i=0;i<4;i++) {
             final int idx=i;
@@ -238,7 +290,8 @@ public final class WorkbenchActivity extends Activity {
             tile.setGravity(Gravity.CENTER);
             tile.setPadding(0,dp(14),0,dp(14));
             if (i==activeTab) tile.setBackground(makeBackground(PANEL_LIGHT, PANEL, 9, 0xFF287EAB));
-            tile.setOnClickListener(v->{activeTab=idx;showWorkspace();});
+            tile.setMinHeight(dp(48)); tile.setFocusable(true); tabButtons.add(tile);
+            tile.setOnClickListener(v->selectTab(idx));
             rail.addView(tile);
         }
         // Reduce side panels on small DeX windows instead of distorting the preview.
@@ -247,7 +300,10 @@ public final class WorkbenchActivity extends Activity {
         LinearLayout library=column();
         library.setPadding(dp(10),dp(12),dp(8),dp(10));
         library.setBackgroundColor(PANEL);
-        workspace.addView(library,width(libraryWidth));
+        if(widthDp>=1100) {
+            ScrollView libraryScroll=scroll(); libraryScroll.addView(library);
+            workspace.addView(libraryScroll,width(libraryWidth));
+        }
         library.addView(text("PROJECT MEDIA", 13, TEXT, true));
         library.addView(text("2 still-image inputs",10,MUTED,false));
         library.addView(gap(12));
@@ -255,7 +311,7 @@ public final class WorkbenchActivity extends Activity {
         library.addView(gap(10));
         library.addView(mediaTile("B  /  EMBER", "IMPORT IMAGE B", 1));
         library.addView(gap(16));
-        TextView hint = text("BC-1 test assets\nNo imported videos or saved projects yet.",11,MUTED,false);
+        TextView hint = text("Still-image effects lab\nLast session restores automatically. Video editing is not yet available.",11,MUTED,false);
         library.addView(hint);
 
         LinearLayout center = column();
@@ -268,7 +324,7 @@ public final class WorkbenchActivity extends Activity {
         previewHost.addView(preview(),p);
         center.addView(previewHost,columnWeight(1));
         center.addView(transport());
-        status=text("GPU initializing…",10,MUTED,false);
+        status=text(lastStatus,10,MUTED,false);
         center.addView(status);
 
         ScrollView inspectorScroll=scroll();
@@ -286,7 +342,7 @@ public final class WorkbenchActivity extends Activity {
         LinearLayout bottom = column();
         bottom.setPadding(dp(10),dp(5),dp(10),dp(7));
         bottom.setBackgroundColor(0xFF101B2A);
-        root.addView(bottom,height(212));
+        root.addView(bottom,height(Math.max(124,Math.min(212,Math.round(getResources().getConfiguration().screenHeightDp*.25f)))));
         bottom.addView(headerLine("DEMO TIMELINE  /  STILL A → STILL B", "SCRUB TO PREVIEW"));
         timeline=new TimelineView(this);
         bottom.addView(timeline,columnWeight(1));
@@ -296,6 +352,7 @@ public final class WorkbenchActivity extends Activity {
         LinearLayout tile = column();
         tile.setPadding(dp(9),dp(15),dp(6),dp(15));
         tile.setBackground(makeBackground(0xFF15354D, 0xFF101B2B, 9, 0xFF325573));
+        tile.setContentDescription(subtitle); tile.setFocusable(true);
         tile.addView(text(title,13,CYAN,true));
         tile.addView(text(subtitle,10,TEXT,false));
         tile.setOnClickListener(v->pickImage(slot));
@@ -319,9 +376,11 @@ public final class WorkbenchActivity extends Activity {
         strip.setPadding(dp(5),dp(6),dp(5),dp(5));
         progressText=text("00:00.0 / 00:03.5",11,MUTED,false);
         strip.addView(progressText);
-        strip.addView(gapHorizontal(12));
+        strip.addView(gapHorizontal(6));
         play=text(playing ? "Ⅱ PAUSE" : "▶ PLAY",13,CYAN,true);
         play.setGravity(Gravity.CENTER);
+        play.setMinHeight(dp(48)); play.setFocusable(true);
+        play.setContentDescription("Play or pause transition");
         play.setPadding(dp(12),dp(8),dp(12),dp(8));
         play.setBackground(makeBackground(PANEL_LIGHT,PANEL,10,0xFF254965));
         play.setOnClickListener(v -> {
@@ -330,11 +389,14 @@ public final class WorkbenchActivity extends Activity {
             updatePlayText();
         });
         strip.addView(play);
+        strip.addView(gapHorizontal(6));
+        strip.addView(action("↺",()->{playing=false;engine.progress=0f;updatePlayText();syncProgress();}));
         return strip;
     }
 
     private void populateTools() {
         if (panelContent == null) return;
+        progressBar=null;
         panelContent.removeAllViews();
         switch (activeTab) {
             case 0:
@@ -345,10 +407,12 @@ public final class WorkbenchActivity extends Activity {
                 break;
             case 1:
                 panelContent.addView(text("TRANSITION",12,CYAN,true));
-                panelContent.addView(spinner(EngineSettings.TRANSITIONS,engine.transition,i->engine.transition=i));
+                panelContent.addView(spinner(EngineSettings.TRANSITIONS,engine.transition,i->{engine.transition=i;syncProgress();}));
+                panelContent.addView(text("MOTION CURVE",12,CYAN,true));
+                panelContent.addView(spinner(EngineSettings.EASINGS,engine.easing,i->engine.easing=i));
                 panelContent.addView(gap(7));
                 panelContent.addView(text("TRANSITION PROGRESS",12,CYAN,true));
-                progressBar=seek(Math.round(engine.progress*1000),1000,i->{engine.progress=i/1000f;syncProgress();});
+                progressBar=seek(Math.round(engine.progress*1000),1000,i->{playing=false;updatePlayText();engine.progress=i/1000f;syncProgress();});
                 panelContent.addView(progressBar);
                 panelContent.addView(text("Scrub the preview above or press Play to animate the A/B transition.",11,MUTED,false));
                 break;
@@ -356,15 +420,18 @@ public final class WorkbenchActivity extends Activity {
                 panelContent.addView(text("EFFECT ON IMAGE A",12,CYAN,true));
                 panelContent.addView(spinner(EngineSettings.EFFECTS,engine.effect,i->engine.effect=i));
                 panelContent.addView(gap(8));
-                panelContent.addView(text("EFFECT STRENGTH",12,CYAN,true));
-                panelContent.addView(seek(Math.round(engine.intensity*100),100,i->engine.intensity=i/100f));
-                panelContent.addView(text("Gaussian Blur · Glow · Chroma Key · Grayscale · Opacity",11,MUTED,false));
+                panelContent.addView(parameter("EFFECT STRENGTH",engine.intensity,i->engine.intensity=i/100f));
+                panelContent.addView(text("Exposure / Saturation: 50% is neutral. Other effects increase from 0%. Chroma Key sets green tolerance.",11,MUTED,false));
+                panelContent.addView(parameter("IMAGE A OPACITY",engine.opacity,i->engine.opacity=i/100f));
+                panelContent.addView(action("RESET EFFECT",()->{engine.effect=0;engine.intensity=.6f;engine.opacity=1f;populateTools();glView.requestRender();}));
                 break;
             default:
                 panelContent.addView(text("RENDER QUALITY",12,CYAN,true));
                 panelContent.addView(spinner(EngineSettings.QUALITIES,engine.quality,i->engine.quality=i));
                 panelContent.addView(gap(10));
                 panelContent.addView(action("CHOOSE UI LAYOUT",this::selectWorkspace));
+                panelContent.addView(text("Active: "+currentWorkspace+" • requested: "+preference,11,MUTED,false));
+                panelContent.addView(text("Space: play / pause\n← →: scrub • Home / End: endpoints\nCtrl+1–4: tool tabs\nBlur results cache until the source, strength or quality changes.",11,MUTED,false));
                 panelContent.addView(action("EXPORT (NOT YET IMPLEMENTED)", ()->
                         Toast.makeText(this,"Video export arrives in a later BC-1 release",Toast.LENGTH_LONG).show()));
                 panelContent.addView(text("Preview composition remains 16:9 in both layouts. Changing UI mode never changes media or export settings.",11,MUTED,false));
@@ -388,23 +455,45 @@ public final class WorkbenchActivity extends Activity {
     private interface Choose { void accept(int index); }
     private Spinner spinner(String[] options, int selected, Choose whenSelected) {
         Spinner spinner=new Spinner(this);
-        ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,options);
+        ArrayAdapter<String> adapter=new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,options) {
+            @Override public View getView(int position,View convert,ViewGroup parent) {
+                TextView t=(TextView)super.getView(position,convert,parent);
+                t.setTextColor(TEXT); t.setTextSize(12); t.setSingleLine(false); return t;
+            }
+            @Override public View getDropDownView(int position,View convert,ViewGroup parent) {
+                TextView t=(TextView)super.getDropDownView(position,convert,parent);
+                t.setTextColor(TEXT); t.setTextSize(13); t.setBackgroundColor(PANEL);
+                t.setMinHeight(dp(48)); return t;
+            }
+        };
+        spinner.setMinimumHeight(dp(48));
         spinner.setAdapter(adapter);
         spinner.setSelection(selected);
         spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(AdapterView<?> parent,View view,int position,long id) {whenSelected.accept(position);}
+            @Override public void onItemSelected(AdapterView<?> parent,View view,int position,long id) {whenSelected.accept(position);glView.requestRender();}
             @Override public void onNothingSelected(AdapterView<?> parent) { }
         });
         return spinner;
     }
+    private View parameter(String title,float initial,Choose changed) {
+        LinearLayout group=column();
+        TextView label=text(title+"  "+Math.round(initial*100)+"%",12,CYAN,true);
+        group.addView(label);
+        SeekBar control=seek(Math.round(initial*100),100,value->{
+            label.setText(title+"  "+value+"%");changed.accept(value);
+        });
+        control.setContentDescription(title);
+        group.addView(control);return group;
+    }
     private SeekBar seek(int initial,int max,Choose changed) {
         SeekBar bar = new SeekBar(this);
+        bar.setMinimumHeight(dp(48));
         bar.setMax(max);
         bar.setProgress(initial);
         bar.setProgressTintList(android.content.res.ColorStateList.valueOf(CYAN));
         bar.setThumbTintList(android.content.res.ColorStateList.valueOf(CYAN));
         bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar b,int value,boolean fromUser) {if(fromUser) changed.accept(value);}
+            @Override public void onProgressChanged(SeekBar b,int value,boolean fromUser) {if(fromUser) {changed.accept(value);glView.requestRender();}}
             @Override public void onStartTrackingTouch(SeekBar b) { }
             @Override public void onStopTrackingTouch(SeekBar b) { }
         });
@@ -412,14 +501,47 @@ public final class WorkbenchActivity extends Activity {
     }
 
     private void syncProgress() {
+        glView.requestRender();
         if (progressBar != null && progressBar.getProgress()!=Math.round(engine.progress*1000))
             progressBar.setProgress(Math.round(engine.progress*1000));
         if (progressText != null) progressText.setText(String.format(Locale.US,"00:%04.1f / 00:03.5",engine.progress*3.5f));
         if (timeline != null) timeline.invalidate();
     }
-    private void updatePlayText(){if(play!=null)play.setText(playing?"Ⅱ PAUSE":"▶ PLAY");}
+    private void updatePlayText(){
+        if(play!=null)play.setText(playing?"Ⅱ PAUSE":"▶ PLAY");
+        if(!playing && status!=null) status.setText(lastStatus.replaceAll("[0-9]+ FPS","paused"));
+        handler.removeCallbacks(playback);
+        if(playing && resumed) handler.post(playback);
+        glView.requestRender();
+    }
+    private void selectTab(int index) {
+        activeTab=index;
+        for(int i=0;i<tabButtons.size();i++) {
+            TextView tab=tabButtons.get(i); tab.setTextColor(i==index?CYAN:MUTED);
+            tab.setBackground(i==index?makeBackground(0xFF154464,0xFF10253A,10,0xFF287EAB):null);
+        }
+        populateTools();
+    }
+    private void saveSession() {
+        getSharedPreferences(PREF_FILE,MODE_PRIVATE).edit()
+            .putInt("transition",engine.transition).putInt("effect",engine.effect)
+            .putInt("quality",engine.quality).putInt("easing",engine.easing)
+            .putFloat("progress",engine.progress).putFloat("intensity",engine.intensity)
+            .putFloat("opacity",engine.opacity).apply();
+    }
     /** Simple hardware keyboard controls for DeX and future desktop UX tests. */
     @Override public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if(event.isCtrlPressed() && keyCode>=KeyEvent.KEYCODE_1 && keyCode<=KeyEvent.KEYCODE_4) {
+            selectTab(keyCode-KeyEvent.KEYCODE_1);return true;
+        }
+        if(keyCode==KeyEvent.KEYCODE_MOVE_HOME || keyCode==KeyEvent.KEYCODE_MOVE_END) {
+            playing=false;engine.progress=keyCode==KeyEvent.KEYCODE_MOVE_HOME?0f:1f;
+            updatePlayText();syncProgress();return true;
+        }
+        // Let focused controls retain arrow/space keyboard navigation.
+        View focused=getCurrentFocus();
+        if(focused instanceof SeekBar || focused instanceof Spinner || (focused!=null && focused.isClickable()))
+            return super.onKeyDown(keyCode,event);
         if (keyCode == KeyEvent.KEYCODE_SPACE) {
             playing = !playing;
             lastFrameNs = System.nanoTime();
@@ -437,6 +559,7 @@ public final class WorkbenchActivity extends Activity {
         return super.onKeyDown(keyCode,event);
     }
     private void pickImage(int slot) {
+        if(importing) {Toast.makeText(this,"An image is still loading",Toast.LENGTH_SHORT).show();return;}
         requestedImageSlot=slot;
         Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -447,17 +570,62 @@ public final class WorkbenchActivity extends Activity {
     @Override protected void onActivityResult(int request,int result,Intent data) {
         super.onActivityResult(request,result,data);
         if (request != IMAGE_PICKER || result != RESULT_OK || data == null || data.getData()==null) return;
-        try {
-            Bitmap src=readImage(data.getData());
-            if (src==null) throw new IOException("Unsupported image");
-            Bitmap fitted=fit16x9(src);
-            src.recycle();
-            int slot=requestedImageSlot;
-            glView.queueEvent(()->renderer.setInput(slot,fitted));
-            Toast.makeText(this,"Image "+(slot==0?"A":"B")+" loaded",Toast.LENGTH_SHORT).show();
-        } catch (Exception e) {Toast.makeText(this,"Import failed: "+e.getMessage(),Toast.LENGTH_LONG).show();}
+        final int slot=requestedImageSlot;
+        final Uri uri=data.getData();
+        importing=true;
+        Toast.makeText(this,"Loading image "+(slot==0?"A":"B")+"…",Toast.LENGTH_SHORT).show();
+        imageWorker.execute(()->{
+            Bitmap fitted=null;
+            try {
+                Bitmap src=readImage(uri);
+                if(src==null) throw new IOException("Unsupported image");
+                fitted=fit16x9(src); src.recycle();
+                AtomicFile file=new AtomicFile(new File(getFilesDir(),"input-"+slot+".png"));
+                FileOutputStream output=null;
+                try {
+                    output=file.startWrite();
+                    if(!fitted.compress(Bitmap.CompressFormat.PNG,100,output)) throw new IOException("Cannot save image");
+                    file.finishWrite(output);
+                } catch(Exception ex) {file.failWrite(output);throw ex;}
+                deliverInput(slot,fitted);
+                fitted=null;
+                handler.post(()->{importing=false;if(!isDestroyed()) Toast.makeText(this,"Image loaded • session saved",Toast.LENGTH_SHORT).show();});
+            } catch(Exception | OutOfMemoryError ex) {
+                if(fitted!=null) fitted.recycle();
+                handler.post(()->{importing=false;if(!isDestroyed()) Toast.makeText(this,"Image import failed; previous input retained",Toast.LENGTH_LONG).show();});
+            }
+        });
+    }
+    private void deliverInput(int slot,Bitmap bitmap) {
+        handler.post(()->{
+            if(isDestroyed()){bitmap.recycle();return;}
+            inputNames[slot]="IMPORTED IMAGE "+(slot==0?"A":"B");
+            glView.queueEvent(()->renderer.setInput(slot,bitmap));
+            glView.requestRender();
+            if(timeline!=null) timeline.invalidate();
+        });
+    }
+    private void restoreInputs() {
+        imageWorker.execute(()->{
+            for(int slot=0;slot<2;slot++) {
+                AtomicFile file=new AtomicFile(new File(getFilesDir(),"input-"+slot+".png"));
+                if(!file.getBaseFile().exists()) continue;
+                try(InputStream stream=file.openRead()) {
+                    Bitmap bitmap=BitmapFactory.decodeStream(stream);
+                    if(bitmap!=null) deliverInput(slot,bitmap);
+                } catch(IOException ignored) { /* Keep the demo when no recoverable saved input exists. */ }
+            }
+        });
     }
     private Bitmap readImage(Uri uri) throws IOException {
+        if(Build.VERSION.SDK_INT>=28) {
+            return ImageDecoder.decodeBitmap(ImageDecoder.createSource(getContentResolver(),uri),(decoder,info,source)->{
+                int w=info.getSize().getWidth(),h=info.getSize().getHeight();
+                float scale=Math.min(1f,2048f/Math.max(w,h));
+                decoder.setTargetSize(Math.max(1,Math.round(w*scale)),Math.max(1,Math.round(h*scale)));
+                decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
+            });
+        }
         BitmapFactory.Options info=new BitmapFactory.Options();
         info.inJustDecodeBounds=true;
         try(InputStream s=getContentResolver().openInputStream(uri)){BitmapFactory.decodeStream(s,null,info);}
@@ -483,6 +651,7 @@ public final class WorkbenchActivity extends Activity {
     private View action(String title,Runnable runnable) {
         TextView view=text(title,11,CYAN,true);
         view.setGravity(Gravity.CENTER);
+        view.setMinHeight(dp(48)); view.setFocusable(true);
         view.setPadding(dp(10),dp(13),dp(10),dp(13));
         view.setBackground(makeBackground(PANEL_LIGHT,PANEL,9,0xFF295375));
         view.setOnClickListener(v->runnable.run());
@@ -551,7 +720,7 @@ public final class WorkbenchActivity extends Activity {
     /** An intentionally labeled demo, not an editable audio/video timeline. Touch to scrub. */
     private final class TimelineView extends View {
         private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
-        TimelineView(Context context){super(context);setBackground(makeBackground(PANEL,BACKGROUND,10,0xFF244160));}
+        TimelineView(Context context){super(context);setContentDescription("Still image transition timeline; drag to scrub");setBackground(makeBackground(PANEL,BACKGROUND,10,0xFF244160));}
         @Override protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
             float d=getResources().getDisplayMetrics().density;
@@ -568,7 +737,7 @@ public final class WorkbenchActivity extends Activity {
                 p.setColor(MUTED);
                 canvas.drawText(String.format(Locale.US,"%02d",i/2),x-5*d,12*d,p);
             }
-            String[] labels={"IMAGE A","IMAGE B","WIPE"};
+            String[] labels={"IMAGE A","IMAGE B","FX"};
             int[] fills={0xFF215A80,0xFF19486B,0xFF613E9B};
             float trackHeight=Math.min(34*d,(h-42*d)/3f);
             for(int i=0;i<3;i++) {
@@ -580,21 +749,28 @@ public final class WorkbenchActivity extends Activity {
                 canvas.drawRoundRect(start,y,end,y+trackHeight,5*d,5*d,p);
                 p.setColor(i==2?0xFFD5C0FF:TEXT);
                 p.setTextSize(10*d);
-                canvas.drawText(i==0?"ICE / INPUT A":i==1?"EMBER / INPUT B":EngineSettings.TRANSITIONS[engine.transition],start+9*d,y+trackHeight*.65f,p);
+                canvas.drawText(i==0?inputNames[0]:i==1?inputNames[1]:EngineSettings.TRANSITIONS[engine.transition],start+9*d,y+trackHeight*.65f,p);
             }
             float x=start+(end-start)*engine.progress;
             p.setColor(CYAN);p.setStrokeWidth(2*d);
             canvas.drawLine(x,24*d,x,Math.min(h-5*d,34*d+3*(trackHeight+3*d)),p);
             canvas.drawCircle(x,25*d,4*d,p);
         }
+        @Override public boolean performClick(){super.performClick();return true;}
         @Override public boolean onTouchEvent(MotionEvent event) {
             if(event.getAction()==MotionEvent.ACTION_DOWN||event.getAction()==MotionEvent.ACTION_MOVE){
+                getParent().requestDisallowInterceptTouchEvent(true);
                 float d=getResources().getDisplayMetrics().density;
                 float start=58*d,end=getWidth()-13*d;
                 if(end>start){engine.progress=Math.max(0f,Math.min(1f,(event.getX()-start)/(end-start)));syncProgress();}
                 playing=false;updatePlayText();return true;
             }
-            return event.getAction()==MotionEvent.ACTION_UP || super.onTouchEvent(event);
+            if(event.getAction()==MotionEvent.ACTION_UP || event.getAction()==MotionEvent.ACTION_CANCEL) {
+                getParent().requestDisallowInterceptTouchEvent(false);
+                if(event.getAction()==MotionEvent.ACTION_UP) performClick();
+                return true;
+            }
+            return super.onTouchEvent(event);
         }
     }
 }
