@@ -1,3 +1,16 @@
+# Continue bc-1-export-reliability; v1.0.3 is published
+
+Read `NIGHT-WORK.md` on `bc-1-export-reliability` (checkpoint `8885c700bff7aaa7df0a544ef99669b076c81186`). Investigation source `664e2f2fbe1a91bdf9f01f7767de34cbcf19ae38`, Actions run `38881066895`: debug-only full ExportException logging and three required consecutive 1080p exports, each independently decoded. CI pending. Manifest intentionally still1.0.3/code15; artifact DO-NOT-PUBLISH. Never overwrite the published APK with these changed diagnostic bytes. Inspect failures before a targeted fix; no skipped tests/retries hidden inside tests.
+
+Latest published development APK: https://raw.githubusercontent.com/uran39281-bit/bc-1/main/v1.0.3/BC-1-v1.0.3.apk
+SHA256 `11b5a3cb9119492afc75c78dd4953a36cfcf8d2da13352376be2810b0876d653`. Code15/name1.0.3, retained signing identity; raw download byte-compared. APK commit `df158f449c8ae7318801aa92fe81f0abdb2b5e91`; saved identity `libfile_459142f5a7188191a1cbaddb8f965758`. Source release checkpoint `389e420f42eac1b64034af68c2b29f280b4e75ca` on bc-1-v1.0.3-thumbnails.
+
+v1.0.3 run38874891062 attempt2 passed33 unit+18 Android tests, lint0errors30warnings and independent MP4 decode. Paused/phone/wide/compact/thumbnail screenshots reviewed. IMPORTANT: attempt1 had one muxer export failure; unchanged rerun success does not establish its cause fixed. QA explicitly documents it. Thumbnail bug itself was reproduced on old code and passed after the stable observer fix. All older APKs preserved. No physical Snapdragon/DeX performance claim, no production-stable claim, no Page Curl. Suppress report until04:30 Phoenix.
+
+Historical checkpoints below:
+
+---
+
 # Latest continuation checkpoint — v1.0.3 NOT yet published
 
 Read `NIGHT-WORK.md` and `BC-1-v1.0.3-QA.md` on `bc-1-v1.0.3-thumbnails`, checkpoint `b36a5665d0469590a0eac09773ba1905a57af946`. The thumbnail bug is reproduced on baseline3166116/run38874632718 and fixed on candidate261c82d/run38874891062. Candidate build passes33 unit tests/lint0errors30warnings; its new thumbnail regression passes. Attempt1 Android suite had one DIFFERENT failure: export `Muxer error`; do not call the full candidate verified. One unchanged rerun requested08:47 UTC, GPU job116891243175. Check latest outcome, MP4 independent validation and artifacts before publishing. Reviewed phone/wide/compact/thumbnail screenshots preserve layout. Signed candidate and staged APK blob details are in that checkpoint; nothing published forv1.0.3 yet. Latest verified direct download remainsv1.0.2. Preserve failed-attempt evidence even if rerun passes. If repeat failure, collect debug ExportException causes and fix the actual issue rather than weakening tests.
