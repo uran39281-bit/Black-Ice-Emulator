@@ -33,7 +33,18 @@ public class EditorWorkspaceTest {
         try{
             shell("wm size 1080x1920");shell("wm density 320");
             try(ActivityScenario<EditorActivity> scenario=ActivityScenario.launch(EditorActivity.class)){
-                Thread.sleep(3500);inst.waitForIdleSync();scenario.onActivity(a->{View root=a.getWindow().getDecorView();assertNotNull("Sample project must be loaded before visual checks",text(root,"Ice • First Cut  ▾"));SurfaceView video=surface(root);assertNotNull(video);assertTrue(video.getWidth()>0&&video.getHeight()>0);View parent=(View)video.getParent();text(root,"Effects").performClick();assertSame(parent,video.getParent());assertNotNull(text(root,"GPU EFFECTS"));});capture("v05-phone-9x16");
+                Thread.sleep(3500);inst.waitForIdleSync();
+                scenario.onActivity(a->a.onKeyDown(KeyEvent.KEYCODE_SPACE,new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_SPACE)));
+                Thread.sleep(1500);
+                scenario.onActivity(a->a.onKeyDown(KeyEvent.KEYCODE_SPACE,new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_SPACE)));
+                java.util.concurrent.atomic.AtomicReference<SurfaceView> preview=new java.util.concurrent.atomic.AtomicReference<>();
+                scenario.onActivity(a->preview.set(surface(a.getWindow().getDecorView())));
+                Bitmap pixels=Bitmap.createBitmap(preview.get().getWidth(),preview.get().getHeight(),Bitmap.Config.ARGB_8888);
+                java.util.concurrent.CountDownLatch copied=new java.util.concurrent.CountDownLatch(1);java.util.concurrent.atomic.AtomicInteger result=new java.util.concurrent.atomic.AtomicInteger(-1);
+                inst.runOnMainSync(()->PixelCopy.request(preview.get(),pixels,status->{result.set(status);copied.countDown();},new Handler(Looper.getMainLooper())));
+                assertTrue(copied.await(10,java.util.concurrent.TimeUnit.SECONDS));assertEquals("Preview has rendered a frame",PixelCopy.SUCCESS,result.get());
+                int color=pixels.getPixel(pixels.getWidth()/4,pixels.getHeight()/2);pixels.recycle();assertTrue("Image layers must render visibly in preview",android.graphics.Color.blue(color)>30);
+                scenario.onActivity(a->{View root=a.getWindow().getDecorView();assertNotNull("Sample project must be loaded before visual checks",text(root,"Ice • First Cut  ▾"));SurfaceView video=surface(root);assertNotNull(video);assertTrue(video.getWidth()>0&&video.getHeight()>0);View parent=(View)video.getParent();text(root,"Effects").performClick();assertSame(parent,video.getParent());assertNotNull(text(root,"GPU EFFECTS"));});capture("v05-phone-9x16");
                 shell("wm size 1920x1080");shell("wm density 160");Thread.sleep(1800);inst.waitForIdleSync();scenario.onActivity(a->{assertTrue(surface(a.getWindow().getDecorView()).getWidth()>500);});capture("v05-wide-16x9");
                 inst.getTargetContext().getSharedPreferences(EditorActivity.PREFS,0).edit().putString("mode","WIDE").commit();shell("wm size 780x420");scenario.recreate();Thread.sleep(2500);inst.waitForIdleSync();scenario.onActivity(a->{assertNotNull("Wide preference must be restored",text(a.getWindow().getDecorView(),"WIDE"));SurfaceView video=surface(a.getWindow().getDecorView());assertTrue(video.getWidth()>150&&video.getHeight()>60);});capture("v05-compact-wide");
             }
