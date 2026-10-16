@@ -23,7 +23,8 @@ jobs:
           gradle-version: '8.9'
       - name: Install Android SDK 35
         run: |
-          sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
       - name: Run unit tests and build Android APK
         working-directory: BC-1
         run: gradle --no-daemon testDebugUnitTest assembleDebug
