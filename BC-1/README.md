@@ -1,3 +1,7 @@
+# BC-1 v0.5 — Motion & Layers
+
+Development branch: `bc-1-v0.5-motion`. See [v0.5 architecture and controls](V0.5-ARCHITECTURE.md). Adds independent layers, source-time keyframes, cubic Bézier easing, chroma controls, audio extraction/fades/waveforms, project bundles and DeX interactions while retaining v0.4 project compatibility.
+
 # BC-1 v0.4 Preview — Video Timeline & Export
 
 The current development branch is `bc-1-v0.4-timeline`, continued from v0.3. See [the v0.4 architecture and build guide](V0.4-ARCHITECTURE.md) for the editor, media pipeline, saved projects, export behavior and current limits.
