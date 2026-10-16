@@ -55,7 +55,7 @@ public class VideoEditorTest {
         try(OutputStream out=new FileOutputStream(snapshot)){out.write(ProjectStore.encode(project).getBytes(java.nio.charset.StandardCharsets.UTF_8));}
         File destination=new File(context.getCacheDir(),"published-"+System.nanoTime()+".mp4");
         android.content.SharedPreferences prefs=context.getSharedPreferences(ExportService.PREFS,0);prefs.edit().clear().commit();
-        context.getSharedPreferences("EditorActivity",0).edit().remove("last-project").commit();
+        context.getSharedPreferences(EditorActivity.PREFS,0).edit().remove("last-project").commit();
         try(ActivityScenario<EditorActivity> scenario=ActivityScenario.launch(EditorActivity.class)) {
             scenario.onActivity(a->a.startForegroundService(new android.content.Intent(a,ExportService.class).putExtra("project",snapshot.getPath()).putExtra("destination",Uri.fromFile(destination).toString())));
             long deadline=System.currentTimeMillis()+180000;
@@ -120,7 +120,7 @@ public class VideoEditorTest {
     }
     @Test public void previewSeeksAfterTrimAcrossBothTracks() throws Exception {
         EditProject p=project(0);CountDownLatch ready=new CountDownLatch(1);AtomicReference<PlaybackException> error=new AtomicReference<>();AtomicReference<CompositionPlayer> ref=new AtomicReference<>();
-        context.getSharedPreferences("EditorActivity",0).edit().remove("last-project").commit();
+        context.getSharedPreferences(EditorActivity.PREFS,0).edit().remove("last-project").commit();
         try(ActivityScenario<EditorActivity> scenario=ActivityScenario.launch(EditorActivity.class)) {
             scenario.onActivity(activity->{
                 SurfaceView view=new SurfaceView(activity);activity.setContentView(view);
