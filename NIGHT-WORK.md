@@ -1,8 +1,14 @@
-# Active development has moved to bc-1-v1.0.1-ui
+# Latest verified development: bc-1-v1.0.1-ui
 
-Read NIGHT-WORK.md on `bc-1-v1.0.1-ui` for the latest follow-up. v1.0 is verified and published; do not overwrite it. The original V1 phone/desktop reference images have now been recovered and are stored on the new branch under BC-1/design/v1/. Earlier unavailable-reference notes below are historical.
+Read NIGHT-WORK.md on `bc-1-v1.0.1-ui` before continuing. The latest checkpoint is `5441aaf23a5932b90d6c8739572d071f834af5c7`; tested code `27e09676cd88f875353dd5e86409dafd2d6f4d1c`, Actions `38869704876`: 30 unit +17 Android tests pass, lint0errors28warnings, independent MP4 decode passes. All final phone, wide, compact-wide and initial paused-preview screenshots reviewed.
 
-v1.0.1 candidate source: `e0cb73b1dad4125034c83f82d67acaca8d74e425`; Actions run `38868760540`. Adds V1 line icons, shortcut toolbar, preview scrubber, fixed track labels and more timeline space. Local 30 unit tests pass; full Android checks and screenshot review pending. VersionCode 13; publish only as a NEW versioned APK after verification.
+v1.0.1 is published in the separate APK repository, preserving v1.0 and older versions:
+https://raw.githubusercontent.com/uran39281-bit/bc-1/main/v1.0.1/BC-1-v1.0.1.apk
+SHA256 `5b01c353f54f60f89b2345f5d6b51245581abff427d043fae840ea800442b871`; retained signing certificate verified. VersionCode13/name1.0.1. Not physically Snapdragon/DeX tested.
+
+The official V1 phone/desktop references have been recovered and versioned under BC-1/design/v1/. v1.0.1 adds line icons, nine editing shortcuts, scrubber, pinned track labels and desktop undo/save controls. The latest branch checkpoint lists remaining useful UI improvements; any further APK needs a NEW version/path/code and verification.
+
+The older v1.0 qualification below is retained as history.
 
 ---
 
