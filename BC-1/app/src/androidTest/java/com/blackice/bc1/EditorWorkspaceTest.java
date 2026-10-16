@@ -67,6 +67,24 @@ public class EditorWorkspaceTest {
                 Thread.sleep(500);
                 scenario.onActivity(a->{android.widget.HorizontalScrollView scroll=(android.widget.HorizontalScrollView)described(a.getWindow().getDecorView(),"Timeline scroll");scroll.scrollTo(140,0);assertTrue("Timeline scroll is available after zoom",scroll.getScrollX()>0);});capture("v10-phone-9x16");
                 shell("wm size 1920x1080");shell("wm density 160");Thread.sleep(1800);inst.waitForIdleSync();scenario.onActivity(a->{assertTrue(surface(a.getWindow().getDecorView()).getWidth()>500);});assertVisiblePreview(scenario);capture("v10-wide-16x9");
+                scenario.onActivity(a->{
+                    View root=a.getWindow().getDecorView();View first=described(root,"Select ICE / OPENING"),second=described(root,"Select ICE / DETAIL");
+                    assertNotNull(first);assertNotNull(second);int[] p1=new int[2],p2=new int[2];first.getLocationOnScreen(p1);second.getLocationOnScreen(p2);
+                    assertEquals("V1 desktop cards share a row",p1[1],p2[1]);assertTrue("Two readable media columns",p2[0]>p1[0]&&first.getWidth()>100);
+                    View previewParent=(View)surface(root).getParent();
+                    described(root,"Filter media: Video").performClick();assertNotNull(text(root,"No matching media"));assertNotNull(text(root,"0 / 2 clips"));
+                    described(root,"Filter media: Audio").performClick();assertNotNull(text(root,"No matching media"));
+                    described(root,"Filter media: Image").performClick();assertNotNull(text(root,"2 / 2 clips"));
+                    ((android.widget.EditText)described(root,"Search project media")).setText(" detail ");
+                    assertNotNull(text(root,"1 / 2 clips"));assertNull(described(root,"Select ICE / OPENING"));
+                    described(root,"Select ICE / DETAIL").performClick();
+                    assertNotNull("Filtered index maps to the original clip",text(root,"2 / 2  •  ICE / DETAIL"));
+                    assertTrue(described(root,"Select ICE / DETAIL").isSelected());
+                    assertSame("Filtering never recreates the preview surface",previewParent,surface(root).getParent());
+                });
+                scenario.recreate();Thread.sleep(2500);inst.waitForIdleSync();assertVisiblePreview(scenario);
+                scenario.onActivity(a->{View root=a.getWindow().getDecorView();assertEquals(" detail ",((android.widget.EditText)described(root,"Search project media")).getText().toString());assertTrue(described(root,"Filter media: Image").isSelected());assertNotNull(text(root,"1 / 2 clips"));assertTrue(described(root,"Select ICE / DETAIL").isSelected());});capture("v102-media-filtered");
+                scenario.onActivity(a->{View root=a.getWindow().getDecorView();((android.widget.EditText)described(root,"Search project media")).setText("");described(root,"Filter media: All").performClick();assertNotNull(text(root,"2 / 2 clips"));text(root,"Effects").performClick();});
                 inst.getTargetContext().getSharedPreferences(EditorActivity.PREFS,0).edit().putString("mode","WIDE").commit();shell("wm size 780x420");scenario.recreate();Thread.sleep(2500);inst.waitForIdleSync();scenario.onActivity(a->{assertNotNull("Wide preference must be restored",text(a.getWindow().getDecorView(),"WIDE"));SurfaceView video=surface(a.getWindow().getDecorView());assertTrue(video.getWidth()>150&&video.getHeight()>60);});assertVisiblePreview(scenario);capture("v10-compact-wide");
             }
         }finally{shell("wm size "+size);shell("wm density "+density);inst.getTargetContext().getSharedPreferences(EditorActivity.PREFS,0).edit().putString("mode","AUTO").putBoolean("ui-locked",false).commit();}

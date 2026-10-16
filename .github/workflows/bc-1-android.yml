@@ -1,7 +1,7 @@
 name: BC-1 Android build and GPU checks
 on:
   push:
-    branches: [bc-1-v0.2-ui, bc-1-v0.3-effects, bc-1-v0.4-timeline, bc-1-v0.5-motion, bc-1-v1.0, bc-1-v1.0.1-ui]
+    branches: [bc-1-v0.2-ui, bc-1-v0.3-effects, bc-1-v0.4-timeline, bc-1-v0.5-motion, bc-1-v1.0, bc-1-v1.0.1-ui, bc-1-v1.0.2-media]
     paths: ['BC-1/**', '.github/workflows/bc-1-android.yml', '.github/scripts/bc1-*.sh']
   workflow_dispatch:
 permissions:
@@ -31,7 +31,7 @@ jobs:
         run: gradle --no-daemon -Pbc1SideBySide testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
       - uses: actions/upload-artifact@v4
         with:
-          name: BC-1-v1.0.1-apk
+          name: BC-1-v1.0.2-apk
           path: BC-1/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
       - uses: actions/upload-artifact@v4

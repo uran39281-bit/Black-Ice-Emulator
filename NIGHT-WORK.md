@@ -1,5 +1,9 @@
 # BC-1 overnight development checkpoint
 
+## Active follow-up: v1.0.2 media browser
+
+Continue `bc-1-v1.0.2-media`, based on verified v1.0.1. Candidate versionCode14/name1.0.2 is NOT published yet. It adds a responsive two-column desktop media browser, All/Video/Audio/Image filters and filename search, following the actual V1 desktop reference. Filtering is metadata-only; original clip indices and the preview surface are retained. Search/filter state survives activity recreation. Phone and compact-wide layouts remain unchanged. New MediaFilter unit tests and expanded Android workspace checks cover classification, locale-independent search, filtered selection and recreation. Run the full CI gate and review screenshots before publishing a NEW `v1.0.2/BC-1-v1.0.2.apk`. Preserve all older APKs and retained signing identity.
+
 ## Latest work: v1.0.1 V1 interface polish
 
 Continue branch `bc-1-v1.0.1-ui`. Tested code commit `27e09676cd88f875353dd5e86409dafd2d6f4d1c`; Actions run `38869704876`. This continues v0.2–v1.0; never restart or force-push older branches.
