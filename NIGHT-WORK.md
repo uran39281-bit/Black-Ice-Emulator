@@ -2,6 +2,8 @@
 
 ## Active investigation: bc-1-export-reliability
 
+Investigation source `664e2f2fbe1a91bdf9f01f7767de34cbcf19ae38`; Actions run `38881066895` is pending. Local cached-dependency compilation and33 JVM tests passed; shell syntax/diff checks passed. These do not substitute for Android tests. Next run: inspect both CI jobs, fetch complete BC1Export cause chain if failing, and examine all three independent MP4 checks if passing. Preserve attempt1 failure evidence from v1.0.3; three successes would improve evidence but not prove universal export stability.
+
 Continue this branch for export reliability; v1.0.3 remains the published download. This branch only adds debug-only nested ExportException logging and three consecutive required 1080p service exports, each independently ffmpeg-decoded/ffprobed. No automatic retry, timeout increase, codec-policy change or skipped tests. Waits for foreground-service destruction between exports. It does NOT claim to fix the intermittent muxer error. Artifact is intentionally named `BC-1-export-investigation-DO-NOT-PUBLISH`; manifest still1.0.3/code15, so NEVER publish these changed bytes over v1.0.3. Any qualified product change must use a new version/code/path. Inspect CI logs, especially BC1Export and BC1ExportTest, before choosing a targeted fix.
 
 ## Latest published work: v1.0.3 thumbnail reliability
