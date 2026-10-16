@@ -56,7 +56,7 @@ public final class ClipEffect implements GlEffect {
             if(easing==1) progress=progress*progress*(3-2*progress);
             try {
                 program.use(); program.setSamplerTexIdUniform("uInput",tex,0);
-                long sourceTime=Math.max(0,timeMs-p.startMs)+c.inMs;
+                long sourceTime=Math.round(Math.max(0,timeMs-p.startMs)*c.speed)+c.inMs;
                 program.setFloatsUniform("uTransform",new float[]{c.motion.value(0,sourceTime,c.x),c.motion.value(1,sourceTime,c.y),c.motion.value(2,sourceTime,c.scale),(float)Math.toRadians(c.motion.value(3,sourceTime,c.rotation))});
                 program.setFloatsUniform("uKeyColor",new float[]{((c.keyColor>>16)&255)/255f,((c.keyColor>>8)&255)/255f,(c.keyColor&255)/255f});
                 program.setFloatsUniform("uChroma",new float[]{c.chroma?1:0,c.keyTolerance,c.keySoftness,c.keySpill});

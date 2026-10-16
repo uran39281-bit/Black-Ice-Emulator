@@ -33,7 +33,7 @@ public class ExportDiagnosticsUiTest {
             assertTrue(copy.get(0).performAction(AccessibilityNodeInfo.ACTION_CLICK));inst.waitForIdleSync();
             scenario.onActivity(a->{ClipboardManager clipboard=(ClipboardManager)a.getSystemService(Context.CLIPBOARD_SERVICE);
                 assertTrue(clipboard.hasPrimaryClip());String copied=clipboard.getPrimaryClip().getItemAt(0).coerceToText(a).toString();
-                assertTrue(copied.contains(report));assertTrue(copied.contains("BC-1 v1.0.4"));assertFalse(copied.contains("customer.mp4"));
+                assertTrue(copied.contains(report));assertTrue(copied.contains("BC-1 v1.1.0"));assertFalse(copied.contains("customer.mp4"));
                 clipboard.setPrimaryClip(ClipData.newPlainText("", ""));
             });
         }

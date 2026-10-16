@@ -34,7 +34,7 @@ public final class PreviewProxy implements AutoCloseable {
 
     public PreviewProxy(Context context) {
         this.context=context.getApplicationContext();
-        directory=new File(context.getCacheDir(),"bc1-preview-v1");
+        directory=new File(context.getCacheDir(),"bc1-preview-v11");
     }
     public static boolean required(EditProject project) {
         return project.clips.size()>1 || (!project.clips.isEmpty()&&project.clips.get(0).image);

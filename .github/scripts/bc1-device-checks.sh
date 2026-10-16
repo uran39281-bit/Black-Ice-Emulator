@@ -34,3 +34,18 @@ assert 3 < float(report['format']['duration']) < 5, report['format']
 print('Independent MP4 check passed:', sys.argv[1], 'H.264 1920x1080 + AAC; decoded without errors')
 PYVERIFY
 done
+
+# A/V speed changes must change both presentation duration and exported timestamps.
+SPEED_MP4="BC-1/app/build/reports/androidTests/qa/speed-180p.mp4"
+ffmpeg -v error -xerror -i "$SPEED_MP4" -f null -
+ffprobe -v error -show_streams -show_format -of json "$SPEED_MP4" > "${SPEED_MP4}.ffprobe.json"
+python3 - "${SPEED_MP4}.ffprobe.json" <<'PYVERIFY'
+import json,sys
+report=json.load(open(sys.argv[1]))
+video=next(s for s in report['streams'] if s['codec_type']=='video')
+audio=next(s for s in report['streams'] if s['codec_type']=='audio')
+assert video['codec_name']=='h264' and audio['codec_name']=='aac'
+assert 4.8<float(report['format']['duration'])<5.2, report['format']
+assert abs(float(video['duration'])-float(audio['duration']))<.2, (video,audio)
+print('Independent speed MP4 check passed: synchronized H.264/AAC, five seconds')
+PYVERIFY

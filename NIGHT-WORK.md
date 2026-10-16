@@ -1,3 +1,9 @@
+# Active development — BC-1 v1.1.0 contextual timeline
+
+Branch `bc-1-v1.1-timeline`, based on ddf5a630 (v1.0.4). User requested cleaner contextual menus, trim/move handles, zoom, snapping, preview transforms, speed/text controls, focused panels and undo/redo. Implementation and 46 local unit tests pass; Android CI and screenshot/export qualification PENDING. Read BC-1-v1.1-QA.md. Do not publish until tests pass and screenshots are inspected. Candidate versionCode17/name1.1.0. Retained signing identity required. Older published v1.0.4 remains the fallback.
+
+---
+
 # BC-1 overnight development checkpoint
 
 ## Latest verified development build: v1.0.4

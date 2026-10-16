@@ -75,6 +75,18 @@ public class VideoEditorTest {
         }
         return destination;
     }
+    @Test public void speedAndTextStyleSurviveReopenAndExport() throws Exception {
+        EditProject p=project(-1);TimelineEdits.speed(p,0,2);TimelineEdits.speed(p,1,.5f);assertEquals(5000,p.durationMs());
+        Motion.Key first=new Motion.Key(300,0);first.x1=0;first.y1=0;first.x2=1;first.y2=1;p.clips.get(0).motion.put(4,first);p.clips.get(0).motion.put(4,new Motion.Key(2300,1));
+        EditProject.Overlay title=new EditProject.Overlay();title.text="ICE";title.font="monospace";title.color=Color.GREEN;title.alignment=0;title.x=-.8f;title.y=.5f;title.scale=1.5f;title.endMs=5000;p.overlays.add(title);
+        ProjectStore store=new ProjectStore(context);store.save(p);p=store.load(p.id);assertEquals(2,p.clips.get(0).speed,0);assertEquals("monospace",p.overlays.get(0).font);assertEquals(Color.GREEN,p.overlays.get(0).color);assertEquals(0,p.overlays.get(0).alignment);
+        File file=export(p,180);try(MediaMetadataRetriever r=new MediaMetadataRetriever()){
+            r.setDataSource(file.getPath());long duration=Long.parseLong(r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION));assertTrue("Speed changes video duration",Math.abs(duration-5000)<150);
+            int middle=pixel(r,500),blue=pixel(r,2000);assertTrue("Speed preserves source-time opacity keys: "+Integer.toHexString(middle),Color.red(middle)>70&&Color.red(middle)<190);assertTrue(Color.blue(blue)>200&&Color.red(blue)<30);
+            Bitmap frame=r.getFrameAtTime(2000000,MediaMetadataRetriever.OPTION_CLOSEST);int green=0;for(int y=0;y<frame.getHeight()/2;y++)for(int x=0;x<frame.getWidth()/2;x++){int color=frame.getPixel(x,y);if(Color.green(color)>140&&Color.red(color)<60&&Color.blue(color)<80)green++;}frame.recycle();assertTrue("Styled green left-aligned text is exported",green>15);
+        }finally{File qa=new File(context.getFilesDir(),"qa");qa.mkdirs();java.nio.file.Files.copy(file.toPath(),new File(qa,"speed-180p.mp4").toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING);file.delete();}
+        org.json.JSONObject old=new org.json.JSONObject(ProjectStore.encode(p));old.put("schema",2);for(int i=0;i<old.getJSONArray("clips").length();i++)old.getJSONArray("clips").getJSONObject(i).remove("speed");org.json.JSONObject overlay=old.getJSONArray("overlays").getJSONObject(0);overlay.remove("font");overlay.remove("color");overlay.remove("alignment");EditProject legacy=ProjectStore.decode(old.toString());assertEquals(1,legacy.clips.get(0).speed,0);assertEquals(Color.WHITE,legacy.overlays.get(0).color);
+    }
     @Test public void foregroundExportCanBeCancelledWithoutPublishing() throws Exception {
         File file=serviceExport(project(0),true);assertFalse(file.exists());
     }
@@ -164,7 +176,7 @@ public class VideoEditorTest {
     }
     @Test public void corruptOrFutureProjectDoesNotReplaceSavedProject() throws Exception {
         EditProject p=project(0);String json=ProjectStore.encode(p);ProjectStore store=new ProjectStore(context);store.save(p);
-        try{ProjectStore.decode(json.replace("\"schema\": 2","\"schema\": 999"));fail("Unsupported schema must fail");}catch(org.json.JSONException expected){}
+        try{ProjectStore.decode(json.replace("\"schema\": 3","\"schema\": 999"));fail("Unsupported schema must fail");}catch(org.json.JSONException expected){}
         assertEquals(json,ProjectStore.encode(store.load(p.id)));
     }
     @Test public void independentLayerKeyframesCompositeAndChromaKey() throws Exception {
@@ -177,7 +189,7 @@ public class VideoEditorTest {
     @Test public void projectBundlesRoundTripMediaAndRejectTraversal() throws Exception {
         EditProject p=project(-1);p.clips.get(1).track=1;p.clips.get(1).startMs=500;p.clips.get(1).motion.put(0,new Motion.Key(0,.4f));ByteArrayOutputStream out=new ByteArrayOutputStream();ProjectBundle.write(context,p,out);EditProject restored=ProjectBundle.read(context,new ByteArrayInputStream(out.toByteArray()));assertNotEquals(p.id,restored.id);assertEquals(1,restored.clips.get(1).track);assertEquals(.4f,restored.clips.get(1).motion.value(0,0,0),0);assertTrue(new File(Uri.parse(restored.clips.get(0).uri).getPath()).isFile());
         out.reset();try(java.util.zip.ZipOutputStream zip=new java.util.zip.ZipOutputStream(out)){zip.putNextEntry(new java.util.zip.ZipEntry("../escape"));zip.write(1);zip.closeEntry();}try{ProjectBundle.read(context,new ByteArrayInputStream(out.toByteArray()));fail("Traversal must be rejected");}catch(IOException expected){}
-        String legacy=ProjectStore.encode(project(-1)).replace("\"schema\": 2","\"schema\": 1");assertEquals(0,ProjectStore.decode(legacy).clips.get(0).track);
+        String legacy=ProjectStore.encode(project(-1)).replace("\"schema\": 3","\"schema\": 1");assertEquals(0,ProjectStore.decode(legacy).clips.get(0).track);
     }
     @Test public void audioWaveformDecodesRealPeaks() throws Exception {
         String uri=fixture("music.wav");float[] peaks=AudioWaveform.read(context,uri,1000);float max=0;for(float peak:peaks)max=Math.max(max,peak);assertTrue(max>.03f&&max<=1);assertTrue(AudioWaveform.hasAudio(context,uri));

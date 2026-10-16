@@ -64,6 +64,7 @@ public final class CompositionFactory {
                 if(c.track==0)for(EditProject.Placement candidate:placements){if(candidate.index==p.index)break;if(candidate.clip.track==0){previous=candidate.clip;ordinal++;}}
                 List<Effect> effects=audioOnly?List.of():List.of(Presentation.createForWidthAndHeight(w,h,Presentation.LAYOUT_SCALE_TO_FIT),new ClipEffect(p,previous,ordinal%2==0),FrameDropEffect.createDefaultFrameDropEffect(30));
                 EditedMediaItem item=new EditedMediaItem.Builder(source.build()).setFrameRate(30).setRemoveVideo(audioOnly)
+                    .setSpeed(new androidx.media3.common.audio.SpeedProvider(){public float getSpeed(long timeUs){return c.speed;}public long getNextSpeedChangeTimeUs(long timeUs){return C.TIME_UNSET;}})
                     .setDurationUs((c.image?c.durationMs():c.sourceDurationMs)*1000)
                     .setEffects(new Effects(List.of(gain(c.volume,c.durationMs(),c.fadeInMs,c.fadeOutMs)),effects)).build();
                 sequence.addItem(item);cursor=p.endMs;
@@ -147,8 +148,8 @@ public final class CompositionFactory {
                     float iw=width*.45f*scale,ih=iw*image.getHeight()/image.getWidth();
                     canvas.drawBitmap(image,null,new RectF(x-iw/2,y-ih/2,x+iw/2,y+ih/2),paint);
                 } else {
-                    paint.setColor(Color.WHITE); paint.setAlpha(Math.round(opacity*255)); paint.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
-                    paint.setTextAlign(Paint.Align.CENTER); paint.setTextSize(Math.min(width,height)*.065f*scale);
+                    paint.setColor(o.color); paint.setAlpha(Math.round(opacity*255)); paint.setTypeface(Typeface.create(o.font,Typeface.BOLD));
+                    paint.setTextAlign(new Paint.Align[]{Paint.Align.LEFT,Paint.Align.CENTER,Paint.Align.RIGHT}[o.alignment]); paint.setTextSize(Math.min(width,height)*.065f*scale);
                     paint.setShadowLayer(3,0,2,Color.BLACK);
                     String[] lines=o.text.split("\n",-1); float lineHeight=paint.getTextSize()*1.25f;
                     for(int line=0;line<lines.length;line++) {
