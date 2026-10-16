@@ -20,6 +20,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.Display;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -148,7 +149,7 @@ public final class WorkbenchActivity extends Activity {
         int height = c.screenHeightDp;
         Display display = getWindowManager().getDefaultDisplay();
         boolean onExternal = display != null && display.getDisplayId() != Display.DEFAULT_DISPLAY;
-        LayoutPolicy.Workspace next = LayoutPolicy.resolve(preference, width, height, onExternal);
+        LayoutPolicy.Workspace next = LayoutPolicy.resolve(preference, width, height, c.smallestScreenWidthDp, onExternal);
         currentWorkspace = next;
         progressBar = null;
         timeline = null;
@@ -175,7 +176,7 @@ public final class WorkbenchActivity extends Activity {
         brand.addView(text("BLACK ICE EDITOR", 15, TEXT, true));
         brand.addView(text("BC-1 ENGINE LAB  /  v0.2", 9, MUTED, false));
         bar.addView(brand, rowWeight(1));
-        modeText = text("LAYOUT  ▾", 11, CYAN, true);
+        modeText = text(preference.name()+"  ▾", 11, CYAN, true);
         modeText.setPadding(dp(8), dp(10), dp(8), dp(10));
         modeText.setBackground(makeBackground(PANEL_LIGHT, PANEL, 9, 0xFF246999));
         modeText.setOnClickListener(v -> selectWorkspace());
@@ -417,6 +418,24 @@ public final class WorkbenchActivity extends Activity {
         if (timeline != null) timeline.invalidate();
     }
     private void updatePlayText(){if(play!=null)play.setText(playing?"Ⅱ PAUSE":"▶ PLAY");}
+    /** Simple hardware keyboard controls for DeX and future desktop UX tests. */
+    @Override public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (keyCode == KeyEvent.KEYCODE_SPACE) {
+            playing = !playing;
+            lastFrameNs = System.nanoTime();
+            updatePlayText();
+            return true;
+        }
+        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            playing = false;
+            engine.progress = Math.max(0f,Math.min(1f,engine.progress +
+                (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? .025f : -.025f)));
+            updatePlayText();
+            syncProgress();
+            return true;
+        }
+        return super.onKeyDown(keyCode,event);
+    }
     private void pickImage(int slot) {
         requestedImageSlot=slot;
         Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);

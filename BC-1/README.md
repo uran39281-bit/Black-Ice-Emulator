@@ -4,7 +4,7 @@ BC-1 is an original Android OpenGL ES 3.0 effects engine testbed for Snapdragon 
 
 ## User-selectable and automatic layouts
 
-- **Auto** (default): selects Phone UI for narrow portrait windows and Wide UI for sufficiently large landscape/tablet/DeX windows. Checks the activity's **current window size**, not the device's marketed screen size, so DeX resizes can trigger layout changes.
+- **Auto** (default): selects Phone UI for narrow portrait windows and Wide UI for sufficiently large landscape/tablet/DeX windows. Uses current window dimensions, smallest screen width (tablet detection), and external-display context. A rotated ordinary phone stays in Phone UI in Auto mode; DeX resizes can trigger layout changes.
 - **Phone**: portrait-oriented, scrollable single-column interface, preview + demo timeline + bottom tools navigation.
 - **Wide**: tablet/DeX-oriented editor chrome with left media bin, center preview, right inspector, and bottom demo timeline.
 - Selection is saved in app preferences. Tap **LAYOUT** in the top bar, or choose Settings → Choose UI Layout.
@@ -17,6 +17,7 @@ BC-1 is an original Android OpenGL ES 3.0 effects engine testbed for Snapdragon 
 - Four original GPU transitions: Dissolve, Directional Wipe, Checker Dissolve, Radial Reveal.
 - Image A processing: Gaussian Blur, Glow/Bloom, Green Chroma Key, Grayscale, Opacity.
 - Play/pause, touch-scrub demo timeline, effect intensity and processing quality selectors.
+- DeX/keyboard testing: Space plays/pauses, Left/Right arrows scrub the transition by 2.5%.
 - GPU name, approximate FPS, offscreen processing size.
 
 ## Known limitations
