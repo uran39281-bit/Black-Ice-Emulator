@@ -1,0 +1,44 @@
+name: BC-1 APK visual inspection
+on:
+  push:
+    branches: [bc-1-v0.3-effects]
+    paths: ['.github/workflows/bc-1-visual.yml', '.github/scripts/bc1-capture.sh']
+  workflow_dispatch:
+    inputs:
+      source_run:
+        description: Successful BC-1 preview build run ID
+        default: '38848326712'
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: BC-1-v0.3-preview-apk
+          path: qa-apk
+          run-id: ${{ inputs.source_run || '38848326712' }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash .github/scripts/bc1-capture.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: BC-1-workspace-screenshots
+          path: screenshots/
