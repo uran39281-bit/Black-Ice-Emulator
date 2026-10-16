@@ -289,7 +289,7 @@ public final class WorkbenchActivity extends Activity {
             final int idx=i;
             TextView tile=text(railItems[i],10,i==activeTab?CYAN:MUTED,i==activeTab);
             tile.setGravity(Gravity.CENTER);
-            tile.setPadding(0,dp(14),0,dp(14));
+            tile.setPadding(0,dp(compact?6:14),0,dp(compact?6:14));
             if (i==activeTab) tile.setBackground(makeBackground(PANEL_LIGHT, PANEL, 9, 0xFF287EAB));
             tile.setMinHeight(dp(48)); tile.setFocusable(true); tabButtons.add(tile);
             tile.setOnClickListener(v->selectTab(idx));
