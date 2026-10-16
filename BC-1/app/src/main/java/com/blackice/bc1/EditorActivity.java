@@ -241,7 +241,7 @@ public final class EditorActivity extends Activity {
         HorizontalScrollView scroll=new HorizontalScrollView(this);scroll.setHorizontalScrollBarEnabled(false);scroll.setContentDescription("Editing shortcuts");scroll.setBackgroundColor(PANEL);
         LinearLayout bar=row();bar.setPadding(dp(2),dp(4),dp(2),dp(4));bar.setBackgroundColor(PANEL);
         String[] names={"Split","Trim","Duplicate","Opacity","Chroma Key","Extract Audio","Volume","Effects","Delete"};
-        for(String name:names){TextView control=iconButton(name,v->{if(clip()==null){tell("Select a clip first.");return;}if(!editable())return;
+        for(String name:names){TextView control=iconButton(name,v->{if(clip()==null){tell("Select a clip first.");return;}if(!editable())return;if(name.equals("Extract Audio")&&clip().image){tell("Images do not contain an audio track.");return;}
             switch(name){
                 case "Split":onKeyDown(KeyEvent.KEYCODE_S,new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_S));break;
                 case "Trim":trimDialog();break;
@@ -258,7 +258,7 @@ public final class EditorActivity extends Activity {
     }
     private void clipPercent(boolean volume){EditProject.Clip selectedClip=clip();if(selectedClip==null)return;numberDialog(volume?"Volume (%)":"Opacity (%)",String.valueOf(Math.round((volume?selectedClip.volume:selectedClip.opacity)*100)),value->{float percent=Float.parseFloat(value);if(!Float.isFinite(percent)||percent<0||percent>100)throw new IllegalArgumentException("Use a value from 0 to 100.");remember();if(volume)selectedClip.volume=percent/100;else selectedClip.opacity=percent/100;changed(volume?"Volume updated":"Opacity updated");});}
     private java.util.List<Integer> lanes(){java.util.List<Integer> list=new ArrayList<>();list.add(0);for(int i=1;i<8;i++){final int t=i;if(project.clips.stream().anyMatch(c->c.track==t))list.add(i);}return list;}
-    private View buildTimeline(){ScrollView vertical=new ScrollView(this);timelineScroll=new HorizontalScrollView(this);timelineScroll.setFillViewport(true);timeline=new TimelineCanvas();timelineScroll.addView(timeline,new HorizontalScrollView.LayoutParams(-2,dp(40+lanes().size()*52+56)));vertical.addView(timelineScroll);return vertical;}
+    private View buildTimeline(){ScrollView vertical=new ScrollView(this);timelineScroll=new HorizontalScrollView(this);timelineScroll.setFillViewport(true);timelineScroll.setContentDescription("Timeline scroll");timeline=new TimelineCanvas();timelineScroll.setOnScrollChangeListener((v,x,y,oldX,oldY)->timeline.invalidate());vertical.setOnScrollChangeListener((v,x,y,oldX,oldY)->timeline.invalidate());timelineScroll.addView(timeline,new HorizontalScrollView.LayoutParams(-2,dp(40+lanes().size()*52+56)));vertical.addView(timelineScroll);return vertical;}
     private EditProject.Clip clip(){return project.clips.isEmpty()?null:project.clips.get(selected);}
     private void renderInspector() {
         if(inspector==null)return;inspector.removeAllViews();
@@ -450,7 +450,7 @@ public final class EditorActivity extends Activity {
         private float x(long ms){return dp(64)+ms/1000f*timelineScale();}
         @Override protected void onMeasure(int w,int h){setMeasuredDimension(View.resolveSize(Math.max(dp(280),Math.min(dp(30000),(int)x(project.durationMs())+dp(30))),w),View.MeasureSpec.getSize(h));}
         @Override protected void onDraw(Canvas canvas){
-            canvas.getClipBounds(visibleBounds);canvas.drawColor(PANEL);int height=getHeight();float mainY=dp(35),clipH=dp(48);java.util.List<Integer> laneList=lanes();
+            canvas.getClipBounds(visibleBounds);visibleBounds.left=timelineScroll.getScrollX();visibleBounds.right=Math.min(getWidth(),visibleBounds.left+timelineScroll.getWidth());if(timelineScroll.getParent() instanceof ScrollView){ScrollView viewport=(ScrollView)timelineScroll.getParent();visibleBounds.top=viewport.getScrollY();visibleBounds.bottom=Math.min(getHeight(),visibleBounds.top+viewport.getHeight());}canvas.drawColor(PANEL);int height=getHeight();float mainY=dp(35),clipH=dp(48);java.util.List<Integer> laneList=lanes();
             paint.setTextSize(dp(10));paint.setTypeface(Typeface.DEFAULT);paint.setColor(MUTED);
             long interval=1000;while(interval/1000f*timelineScale()<dp(55))interval*=2;
             for(long ms=0;ms<=project.durationMs();ms+=interval){float xx=x(ms);canvas.drawText(seconds(ms)+"s",xx,dp(16),paint);canvas.drawLine(xx,dp(21),xx,height,paint);}
