@@ -69,7 +69,7 @@ public final class MainActivity extends Activity {
         root.setBackgroundColor(Color.rgb(10,14,23));
         root.setPadding(dp(12),dp(8),dp(12),0);
         TextView heading=label("BC-1  /  ENGINE LAB",20,Color.rgb(149,226,255));
-        heading.setTypeface(null,1);
+        heading.setTypeface(null,android.graphics.Typeface.BOLD);
         root.addView(heading);
         root.addView(label("v0.1  •  Snapdragon GPU prototype  •  OpenGL ES 3.0",12,Color.rgb(173,192,211)));
 

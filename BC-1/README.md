@@ -53,6 +53,8 @@ The workflow `.github/workflows/bc-1-android.yml` builds the APK, unit tests and
 
 Debug APK upgrades require the same signing certificate as the installed APK. Do not uninstall an older build to bypass a signature mismatch without preserving its data. CI generates an ephemeral debug certificate; distribute a consistently signed local APK for repeated testing. Signing keys must never be committed.
 
+The distributed v0.3 preview uses `gradle -Pbc1SideBySide assembleDebug` (`com.blackice.bc1.preview`) because the saved v0.2 signing key is unavailable. It installs alongside v0.2 and leaves its data intact. Its private session is separate. Normal builds retain `com.blackice.bc1` for same-key upgrades.
+
 ## Deferred
 
 No video decode/encode, editable multilayer timeline, audio, named projects, MP4 export, 3D Page Curl, or RTX backend. The timeline intentionally represents two still inputs.

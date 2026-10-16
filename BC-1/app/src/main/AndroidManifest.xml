@@ -2,7 +2,8 @@
     <uses-feature android:glEsVersion="0x00030000" android:required="true"/>
     <application
         android:allowBackup="false"
-        android:label="BC-1 Dual Workspace"
+        android:label="${appLabel}"
+        android:icon="@drawable/ic_black_ice"
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:resizeableActivity="true"
         android:usesCleartextTraffic="false">
