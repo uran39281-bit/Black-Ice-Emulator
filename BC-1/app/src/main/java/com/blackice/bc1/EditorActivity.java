@@ -40,6 +40,8 @@ public final class EditorActivity extends Activity {
     private MediaFilter.Kind mediaKind=MediaFilter.Kind.ALL;
     private final ArrayList<TextView> mediaFilterButtons=new ArrayList<>();
     private ThumbnailCache thumbnails;
+    // Stable observers do not retain obsolete cards/canvases or exhaust the bounded listener list.
+    private final Runnable mediaThumbnailsReady=this::refreshMediaThumbnails;
     private boolean uiLocked,previewPending,previewAutoplay;
     private TextView lockButton;
     private SeekBar previewScrubber;
@@ -49,6 +51,7 @@ public final class EditorActivity extends Activity {
     private int inspectorWidth=300;
     private TextView status,time,play,projectLabel,exportButton,emptyPreview;
     private TimelineCanvas timeline;
+    private final Runnable timelineThumbnailsReady=()->{if(!isDestroyed()&&timeline!=null)timeline.invalidate();};
     private HorizontalScrollView timelineScroll;
     private LayoutPolicy.Preference mode=LayoutPolicy.Preference.AUTO;
     private int selected=0,tab=0;
@@ -317,7 +320,7 @@ public final class EditorActivity extends Activity {
             addAction("Restore project bundle",()->pick(RESTORE,"*/*"));
             addAction("Projects / New / Rename",()->projectsMenu());
             addAction("Open v0.3 effects lab",()->startActivity(new Intent(this,WorkbenchActivity.class)));
-            inspector.addView(note("BC-1 v1.0.2\nExport: H.264 MP4 + AAC, 1080p, up to 30 fps. Lower-rate sources keep their cadence.\nSpace: play • Ctrl+Z/Y: undo/redo • Ctrl+S: save\nS: split • arrows: frame step • Ctrl+D: duplicate\nCtrl+wheel: zoom • Shift+wheel: scroll • right-click: clip menu\n3D Page Curl remains excluded."));
+            inspector.addView(note("BC-1 v1.0.3\nExport: H.264 MP4 + AAC, 1080p, up to 30 fps. Lower-rate sources keep their cadence.\nSpace: play • Ctrl+Z/Y: undo/redo • Ctrl+S: save\nS: split • arrows: frame step • Ctrl+D: duplicate\nCtrl+wheel: zoom • Shift+wheel: scroll • right-click: clip menu\n3D Page Curl remains excluded."));
         }
     }
     private void moveClip(int delta){if(!editable())return;int next=selected+delta;if(next<0||next>=project.clips.size())return;remember();project.move(selected,delta);selected=next;changed("Clip moved");}
@@ -448,7 +451,6 @@ public final class EditorActivity extends Activity {
         private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Rect visibleBounds=new Rect();
         private final RectF thumbnailBounds=new RectF();
-        private final Runnable thumbnailReady=()->{if(!isDestroyed())invalidate();};
         private float downX;private boolean dragging,gutterTouch;
         TimelineCanvas(){super(EditorActivity.this);setContentDescription("Timeline: tap a clip to select and seek; drag across the ruler to scrub. Horizontal scroll and plus/minus zoom.");setFocusable(true);}
         private float timelineScale(){return Math.min(dp(pixelsPerSecond),(dp(30000)-dp(94))/Math.max(1f,project.durationMs()/1000f));}
@@ -461,7 +463,7 @@ public final class EditorActivity extends Activity {
             for(long ms=0;ms<=project.durationMs();ms+=interval){float xx=x(ms);canvas.drawText(seconds(ms)+"s",xx,dp(16),paint);canvas.drawLine(xx,dp(21),xx,height,paint);}
             java.util.List<EditProject.Placement> placements=project.placements();
             for(EditProject.Placement p:placements){mainY=dp(35+laneList.indexOf(p.clip.track)*52);float left=x(p.startMs),right=x(p.endMs);if(right<=visibleBounds.left||left>=visibleBounds.right||mainY+clipH<=visibleBounds.top||mainY>=visibleBounds.bottom)continue;paint.setColor(p.index==selected?0xFF226D99:0xFF204057);canvas.drawRoundRect(left,mainY,right,mainY+clipH,dp(5),dp(5),paint);
-                if(p.clip.track<4){Bitmap thumb=thumbnails.get(p.clip,thumbnailReady);if(thumb!=null){canvas.save();canvas.clipRect(left+dp(1),mainY+dp(1),right-dp(1),mainY+clipH-dp(1));float tw=clipH*thumb.getWidth()/thumb.getHeight();float first=left+Math.max(0,(float)Math.floor((visibleBounds.left-left)/tw))*tw;for(float tx=first;tx<Math.min(right,visibleBounds.right);tx+=tw){thumbnailBounds.set(tx,mainY,tx+tw,mainY+clipH);canvas.drawBitmap(thumb,null,thumbnailBounds,paint);}paint.setColor(0xAA08131F);canvas.drawRect(left,mainY+clipH-dp(21),right,mainY+clipH,paint);canvas.restore();}}
+                if(p.clip.track<4){Bitmap thumb=thumbnails.get(p.clip,timelineThumbnailsReady);if(thumb!=null){canvas.save();canvas.clipRect(left+dp(1),mainY+dp(1),right-dp(1),mainY+clipH-dp(1));float tw=clipH*thumb.getWidth()/thumb.getHeight();float first=left+Math.max(0,(float)Math.floor((visibleBounds.left-left)/tw))*tw;for(float tx=first;tx<Math.min(right,visibleBounds.right);tx+=tw){thumbnailBounds.set(tx,mainY,tx+tw,mainY+clipH);canvas.drawBitmap(thumb,null,thumbnailBounds,paint);}paint.setColor(0xAA08131F);canvas.drawRect(left,mainY+clipH-dp(21),right,mainY+clipH,paint);canvas.restore();}}
                 paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(p.index==selected?2:1));paint.setColor(p.index==selected?CYAN:0xFF3B677C);canvas.drawRoundRect(left,mainY,right,mainY+clipH,dp(5),dp(5),paint);paint.setStyle(Paint.Style.FILL);
                 canvas.save();canvas.clipRect(left+dp(4),mainY,right-dp(3),mainY+clipH);paint.setColor(TEXT);paint.setTextSize(dp(11));canvas.drawText(p.clip.name,left+dp(7),mainY+clipH-dp(6),paint);canvas.restore();
                 float[] peaks=waveforms.get(p.clip.uri);if(peaks!=null){paint.setColor(0xFF74D3C1);for(float xx=Math.max(left,visibleBounds.left);xx<Math.min(right,visibleBounds.right);xx+=dp(3)){long source=p.clip.inMs+(long)((xx-left)/(right-left)*p.clip.durationMs());int bin=(int)Math.min(511,source*512/Math.max(1,p.clip.sourceDurationMs));float amplitude=peaks[Math.max(0,bin)]*dp(10);canvas.drawLine(xx,mainY+clipH/2-amplitude,xx,mainY+clipH/2+amplitude,paint);}}
@@ -558,10 +560,11 @@ public final class EditorActivity extends Activity {
         card.setTag(index);
         card.setBackground(buttonBackground(index==selected));card.setSelected(index==selected);
         ImageView image=new ImageView(this);image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        image.setTag(clip);
         image.setImageDrawable(new V1Icon(clip.track>=4?"Volume":"Media",MUTED));
         card.addView(image,new LinearLayout.LayoutParams(-1,dp(mediaColumns==2?72:96)));
         if(clip.track<4){
-            Bitmap thumb=thumbnails.get(clip,()->{if(!isDestroyed()&&image.isAttachedToWindow()){Bitmap loaded=thumbnails.peek(clip);if(loaded!=null)image.setImageBitmap(loaded);}});
+            Bitmap thumb=thumbnails.get(clip,mediaThumbnailsReady);
             if(thumb!=null)image.setImageBitmap(thumb);
         }
         TextView name=label(clip.name,11,TEXT,true);name.setMaxLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);card.addView(name,new LinearLayout.LayoutParams(-1,0,1));
@@ -579,6 +582,21 @@ public final class EditorActivity extends Activity {
                 View card=cells.getChildAt(i);if(!(card.getTag() instanceof Integer))continue;
                 boolean chosen=((Integer)card.getTag())==selected;
                 if(card.isSelected()!=chosen){card.setSelected(chosen);card.setBackground(buttonBackground(chosen));}
+            }
+        }
+    }
+    private void refreshMediaThumbnails(){
+        if(isDestroyed()||mediaGrid==null)return;
+        // Update current images in place; decoding must not recreate cards, focus or scroll state.
+        for(int row=0;row<mediaGrid.getChildCount();row++)if(mediaGrid.getChildAt(row) instanceof ViewGroup){
+            ViewGroup cells=(ViewGroup)mediaGrid.getChildAt(row);
+            for(int i=0;i<cells.getChildCount();i++)if(cells.getChildAt(i) instanceof ViewGroup){
+                ViewGroup card=(ViewGroup)cells.getChildAt(i);
+                if(card.getChildCount()==0||!(card.getChildAt(0) instanceof ImageView))continue;
+                ImageView image=(ImageView)card.getChildAt(0);
+                if(!(image.getTag() instanceof EditProject.Clip))continue;
+                EditProject.Clip clip=(EditProject.Clip)image.getTag();if(clip.track>=4)continue;
+                Bitmap bitmap=thumbnails.peek(clip);if(bitmap!=null)image.setImageBitmap(bitmap);
             }
         }
     }

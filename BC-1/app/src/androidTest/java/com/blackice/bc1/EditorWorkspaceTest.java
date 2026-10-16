@@ -50,6 +50,7 @@ public class EditorWorkspaceTest {
         new ProjectStore(inst.getTargetContext()).save(project);
         inst.getTargetContext().getSharedPreferences(EditorActivity.PREFS,0).edit().putString("last-project",project.id).putString("mode","WIDE").putBoolean("ui-locked",false).commit();
         java.util.concurrent.atomic.AtomicReference<ThumbnailCache> cache=new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<View> currentCard=new java.util.concurrent.atomic.AtomicReference<>();
         try{
             shell("wm size 1920x1080");shell("wm density 160");
             try(ActivityScenario<EditorActivity> scenario=ActivityScenario.launch(EditorActivity.class)){
@@ -68,12 +69,14 @@ public class EditorWorkspaceTest {
                     android.widget.EditText search=(android.widget.EditText)described(a.getWindow().getDecorView(),"Search project media");
                     for(int i=0;i<32;i++)search.setText(i%2==0?"ICE":"ICE / B");
                     ViewGroup card=(ViewGroup)described(a.getWindow().getDecorView(),"Select ICE / B");
+                    currentCard.set(card);
                     assertFalse("Current card starts with a placeholder",((android.widget.ImageView)card.getChildAt(0)).getDrawable() instanceof android.graphics.drawable.BitmapDrawable);
                 }catch(ReflectiveOperationException e){throw new AssertionError(e);}});
                 decodeAllowed.countDown();deadline=SystemClock.elapsedRealtime()+15000;
                 while(cache.get().peek(project.clips.get(1))==null&&SystemClock.elapsedRealtime()<deadline)Thread.sleep(100);
                 assertNotNull("Decode actually completed",cache.get().peek(project.clips.get(1)));inst.waitForIdleSync();
                 scenario.onActivity(a->{View root=a.getWindow().getDecorView();ViewGroup card=(ViewGroup)described(root,"Select ICE / B");android.graphics.drawable.Drawable drawable=((android.widget.ImageView)card.getChildAt(0)).getDrawable();
+                    assertSame("Decode updates the existing card in place",currentCard.get(),card);
                     assertTrue("Latest media card receives decoded pixels after rapid search",drawable instanceof android.graphics.drawable.BitmapDrawable);
                     Bitmap pixels=((android.graphics.drawable.BitmapDrawable)drawable).getBitmap();assertEquals(android.graphics.Color.rgb(24,120,210),pixels.getPixel(pixels.getWidth()/2,pixels.getHeight()/2));assertNotNull(text(root,"1 / 2 clips"));
                 });capture("v103-thumbnails-loaded");

@@ -1,8 +1,8 @@
 # BC-1 overnight development checkpoint
 
-## Active follow-up: thumbnail stress regression
+## Active follow-up: v1.0.3 thumbnail delivery
 
-Continue `bc-1-v1.0.3-thumbnails`. A new Android test deliberately blocks the thumbnail worker, changes search 32 times, then checks that the CURRENT card receives decoded pixels. The initial test-only commit intentionally exercises the v1.0.2 callback implementation to reproduce the suspected stale-placeholder issue. Do not publish this build; v1.0.2 remains the verified download. If reproduced, use stable activity-level observers for current browser/timeline views, retaining bounded caching and background decoding, then rerun all checks and review screenshots. Only a verified new binary may be published as v1.0.3/code15; the baseline still has the old manifest version.
+Continue `bc-1-v1.0.3-thumbnails`. A new Android test deliberately blocks the thumbnail worker, changes search 32 times, then checks that the CURRENT card receives decoded pixels. Baseline `31661164b2d0e53166b6842ace987a3860ec95d6` exercises the v1.0.2 callback implementation; do not publish its artifact (old manifest). The candidate uses stable activity-level observers for current browser/timeline views and updates thumbnail images in place, retaining bounded caching/background decoding and avoiding obsolete-card references. Candidate versionName1.0.3/code15. Baseline failure, candidate success, all tests and screenshots must be checked before publishing a NEW v1.0.3 APK. v1.0.2 remains the latest verified download until then.
 
 ## Latest verified work: v1.0.2 V1 media browser
 
