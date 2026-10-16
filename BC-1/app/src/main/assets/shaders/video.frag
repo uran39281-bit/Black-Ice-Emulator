@@ -5,6 +5,8 @@ out vec4 fragColor;
 uniform sampler2D uInput;
 uniform vec2 uTexel;
 uniform float uAspect,uIntensity,uOpacity,uProgress;
+uniform vec4 uTransform,uChroma;
+uniform vec3 uKeyColor;
 uniform int uEffect,uTransition,uRole,uTop;
 float rnd(vec2 p) { return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
 float mask(vec2 uv,float p) {
@@ -21,7 +23,11 @@ float mask(vec2 uv,float p) {
 }
 void main() {
     float k=uIntensity,p=uProgress;
-    vec2 uv=vUV;
+    vec2 q=(vUV-.5-uTransform.xy*.5)*vec2(uAspect,1.0);
+    float cs=cos(uTransform.w),sn=sin(uTransform.w);
+    q=mat2(cs,-sn,sn,cs)*q/max(.05,uTransform.z);
+    vec2 uv=q/vec2(uAspect,1.0)+.5;
+    float inside=step(0.0,uv.x)*step(uv.x,1.0)*step(0.0,uv.y)*step(uv.y,1.0);
     if(uRole>0 && uTransition==4) uv.x+=uRole==2?p:p-1.0;
     if(uRole>0 && uTransition==5) uv=(uv-.5)/(uRole==2?1.0+.35*p:1.35-.35*p)+.5;
     vec2 coord=uv;
@@ -51,6 +57,14 @@ void main() {
     if(uEffect==9) a.rgb*=exp2((k-.5)*4.0);
     if(uEffect==10) a.rgb=mix(vec3(dot(a.rgb,vec3(.2126,.7152,.0722))),a.rgb,k*2.0);
     if(uEffect==11) a.rgb=mix(a.rgb,(a.rgb-.5)*1.08+.5+vec3(-.06,.015,.09),k);
+    if(uChroma.x>.5){
+        float chromaDistance=length((a.rgb-dot(a.rgb,vec3(.2126,.7152,.0722)))-(uKeyColor-dot(uKeyColor,vec3(.2126,.7152,.0722))));
+        float matte=smoothstep(uChroma.y-uChroma.z,uChroma.y+uChroma.z,chromaDistance);
+        a.a*=matte;
+        vec3 spill=max(uKeyColor-vec3(dot(uKeyColor,vec3(.333333))),vec3(0));
+        a.rgb-=spill*uChroma.w*(1.0-smoothstep(uChroma.y,uChroma.y+uChroma.z*4.0,chromaDistance));
+    }
+    a.a*=inside;
     if(uRole>0) {
         if(uTransition==6) {
             float fade=uRole==2?max(0.0,1.0-2.0*p):max(0.0,2.0*p-1.0);

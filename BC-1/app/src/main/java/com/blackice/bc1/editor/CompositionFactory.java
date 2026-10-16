@@ -44,28 +44,33 @@ public final class CompositionFactory {
         int w=project.portrait?shortEdge:longEdge, h=project.portrait?longEdge:shortEdge;
         List<EditProject.Placement> placements=project.placements(); long duration=project.durationMs();
         List<EditedMediaItemSequence> sequences=new ArrayList<>();
-        int tracks=project.clips.size()>1?2:1;
-        for(int track=0;track<tracks;track++) {
-            EditedMediaItemSequence.Builder sequence=new EditedMediaItemSequence.Builder(Set.of(C.TRACK_TYPE_VIDEO,C.TRACK_TYPE_AUDIO));
-            long cursor=0;
-            for(EditProject.Placement p:placements) if(p.index%2==track) {
-                if(p.startMs>cursor) sequence.addGap((p.startMs-cursor)*1000);
-                EditProject.Clip c=p.clip;
-                MediaItem.Builder source=new MediaItem.Builder().setUri(c.uri);
-                if(c.image) source.setImageDurationMs(c.durationMs());
-                else source.setClippingConfiguration(new MediaItem.ClippingConfiguration.Builder().setStartPositionMs(c.inMs).setEndPositionMs(c.outMs).build());
-                List<Effect> effects=List.of(
-                        Presentation.createForWidthAndHeight(w,h,Presentation.LAYOUT_SCALE_TO_FIT),
-                        new ClipEffect(p,p.index>0?project.clips.get(p.index-1):null),
-                        FrameDropEffect.createDefaultFrameDropEffect(30));
-                EditedMediaItem item=new EditedMediaItem.Builder(source.build()).setFrameRate(30)
-                        .setDurationUs((c.image?c.durationMs():c.sourceDurationMs)*1000)
-                        .setEffects(new Effects(List.of(gain(c.volume)),effects)).build();
-                sequence.addItem(item); cursor=p.endMs;
+        List<List<EditProject.Placement>> videoInputs=new ArrayList<>();
+        // Input zero is topmost. Explicit layers sit above the two alternating base streams.
+        List<List<EditProject.Placement>> groups=new ArrayList<>();
+        for(int layer=3;layer>=1;layer--){List<EditProject.Placement> list=new ArrayList<>();for(EditProject.Placement p:placements)if(p.clip.track==layer)list.add(p);if(!list.isEmpty())groups.add(list);}
+        List<EditProject.Placement> even=new ArrayList<>(),odd=new ArrayList<>();int baseIndex=0;
+        for(EditProject.Placement p:placements)if(p.clip.track==0){(baseIndex++%2==0?even:odd).add(p);}
+        if(!even.isEmpty())groups.add(even);if(!odd.isEmpty())groups.add(odd);
+        for(int layer=4;layer<=7;layer++){List<EditProject.Placement> list=new ArrayList<>();for(EditProject.Placement p:placements)if(p.clip.track==layer)list.add(p);if(!list.isEmpty())groups.add(list);}
+        for(List<EditProject.Placement> group:groups){
+            group.sort(Comparator.comparingLong(p->p.startMs));boolean audioOnly=group.get(0).clip.track>=4;
+            if(!audioOnly)videoInputs.add(group);
+            EditedMediaItemSequence.Builder sequence=new EditedMediaItemSequence.Builder(audioOnly?Set.of(C.TRACK_TYPE_AUDIO):Set.of(C.TRACK_TYPE_VIDEO,C.TRACK_TYPE_AUDIO));long cursor=0;
+            for(EditProject.Placement p:group){
+                if(p.startMs>cursor)sequence.addGap((p.startMs-cursor)*1000);
+                EditProject.Clip c=p.clip;MediaItem.Builder source=new MediaItem.Builder().setUri(c.uri);
+                if(c.image)source.setImageDurationMs(c.durationMs());else source.setClippingConfiguration(new MediaItem.ClippingConfiguration.Builder().setStartPositionMs(c.inMs).setEndPositionMs(c.outMs).build());
+                EditProject.Clip previous=null;int ordinal=0;
+                if(c.track==0)for(EditProject.Placement candidate:placements){if(candidate.index==p.index)break;if(candidate.clip.track==0){previous=candidate.clip;ordinal++;}}
+                List<Effect> effects=audioOnly?List.of():List.of(Presentation.createForWidthAndHeight(w,h,Presentation.LAYOUT_SCALE_TO_FIT),new ClipEffect(p,previous,ordinal%2==0),FrameDropEffect.createDefaultFrameDropEffect(30));
+                EditedMediaItem item=new EditedMediaItem.Builder(source.build()).setFrameRate(30).setRemoveVideo(audioOnly)
+                    .setDurationUs((c.image?c.durationMs():c.sourceDurationMs)*1000)
+                    .setEffects(new Effects(List.of(gain(c.volume,c.durationMs(),c.fadeInMs,c.fadeOutMs)),effects)).build();
+                sequence.addItem(item);cursor=p.endMs;
             }
-            if(cursor<duration) sequence.addGap((duration-cursor)*1000);
-            sequences.add(sequence.build());
+            if(cursor<duration)sequence.addGap((duration-cursor)*1000);sequences.add(sequence.build());
         }
+        if(videoInputs.isEmpty())throw new IllegalArgumentException("Keep at least one video or image layer in the project.");
         if(project.music!=null && project.music.startMs<duration) {
             EditProject.Music m=project.music;
             EditedMediaItemSequence.Builder audio=new EditedMediaItemSequence.Builder(Set.of(C.TRACK_TYPE_AUDIO));
@@ -92,15 +97,16 @@ public final class CompositionFactory {
                     @Override public Size getOutputSize(List<Size> sizes) { return new Size(w,h); }
                     @Override public OverlaySettings getOverlaySettings(int inputId,long timeUs) {
                         long ms=timeUs/1000; boolean active=false;
-                        for(EditProject.Placement p:placements) if(p.index%2==inputId && ms>=p.startMs && ms<p.endMs) {active=true;break;}
+                        for(EditProject.Placement p:inputId<videoInputs.size()?videoInputs.get(inputId):List.<EditProject.Placement>of()) if(ms>=p.startMs && ms<p.endMs) {active=true;break;}
                         return new StaticOverlaySettings.Builder().setAlphaScale(active?1:0).build();
                     }
                 }).setEffects(new Effects(List.of(),finalEffects)).build();
     }
-    private static GainProcessor gain(float volume) {
+    private static GainProcessor gain(float volume){return gain(volume,0,0,0);}
+    private static GainProcessor gain(float volume,long duration,long fadeIn,long fadeOut) {
         return new GainProcessor(new GainProcessor.GainProvider() {
-            @Override public float getGainFactorAtSamplePosition(long sample,int rate) { return volume; }
-            @Override public long isUnityUntil(long sample,int rate) { return volume==1?C.TIME_END_OF_SOURCE:C.TIME_UNSET; }
+            @Override public float getGainFactorAtSamplePosition(long sample,int rate) { long ms=sample*1000/rate;float envelope=1;if(fadeIn>0)envelope=Math.min(envelope,(float)ms/fadeIn);if(fadeOut>0)envelope=Math.min(envelope,(float)(duration-ms)/fadeOut);return volume*Math.max(0,envelope); }
+            @Override public long isUnityUntil(long sample,int rate) { return volume==1&&fadeIn==0&&fadeOut==0?C.TIME_END_OF_SOURCE:C.TIME_UNSET; }
         });
     }
     /** Upload only when timed overlay visibility changes, not once per decoded frame. */
@@ -117,21 +123,23 @@ public final class CompositionFactory {
             if(bitmap==null || bitmap.getWidth()!=width || bitmap.getHeight()!=height) {
                 if(bitmap!=null) bitmap.recycle(); bitmap=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888);activeMask=-1;
             }
-            if(activeMask==mask) return bitmap;
+            boolean animated=false;for(EditProject.Overlay o:overlays)animated|=o.motion.animated();
+            if(activeMask==mask&&!animated) return bitmap;
             bitmap.eraseColor(Color.TRANSPARENT); Canvas canvas=new Canvas(bitmap); Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);
             for(int i=0;i<overlays.size();i++) if((mask&(1<<i))!=0) {
-                EditProject.Overlay o=overlays.get(i); float x=(o.x+1)*width/2f,y=(1-o.y)*height/2f;
-                paint.setAlpha(Math.round(o.opacity*255));
+                EditProject.Overlay o=overlays.get(i);long local=Math.max(0,timeUs/1000-o.startMs);float x=(o.motion.value(0,local,o.x)+1)*width/2f,y=(1-o.motion.value(1,local,o.y))*height/2f;
+                float scale=o.motion.value(2,local,o.scale),opacity=o.motion.value(4,local,o.opacity);canvas.save();canvas.rotate(-o.motion.value(3,local,0),x,y);
+                paint.setAlpha(Math.round(opacity*255));
                 if(o.imageUri!=null) {
                     Bitmap image=images.get(o.imageUri);
                     if(image==null) try(java.io.InputStream in=context.getContentResolver().openInputStream(Uri.parse(o.imageUri))) {
                         image=BitmapFactory.decodeStream(in); if(image==null) throw new java.io.IOException("Cannot decode overlay image"); images.put(o.imageUri,image);
                     } catch(java.io.IOException e) {throw new VideoFrameProcessingException(e);}
-                    float iw=width*.45f*o.scale,ih=iw*image.getHeight()/image.getWidth();
+                    float iw=width*.45f*scale,ih=iw*image.getHeight()/image.getWidth();
                     canvas.drawBitmap(image,null,new RectF(x-iw/2,y-ih/2,x+iw/2,y+ih/2),paint);
                 } else {
-                    paint.setColor(Color.WHITE); paint.setAlpha(Math.round(o.opacity*255)); paint.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
-                    paint.setTextAlign(Paint.Align.CENTER); paint.setTextSize(Math.min(width,height)*.065f*o.scale);
+                    paint.setColor(Color.WHITE); paint.setAlpha(Math.round(opacity*255)); paint.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+                    paint.setTextAlign(Paint.Align.CENTER); paint.setTextSize(Math.min(width,height)*.065f*scale);
                     paint.setShadowLayer(3,0,2,Color.BLACK);
                     String[] lines=o.text.split("\n",-1); float lineHeight=paint.getTextSize()*1.25f;
                     for(int line=0;line<lines.length;line++) {
@@ -141,6 +149,7 @@ public final class CompositionFactory {
                     }
                     paint.clearShadowLayer();
                 }
+                canvas.restore();
             }
             activeMask=mask; return bitmap;
         }

@@ -32,6 +32,9 @@ public final class EditorActivity extends Activity {
     private SurfaceView surface;
     private FrameLayout monitor;
     private LinearLayout inspector;
+    private static final int AUDIO_LAYER=110,BACKUP=111,RESTORE=112;
+    private final java.util.Map<String,float[]> waveforms=new java.util.HashMap<>();
+    private int inspectorWidth=300;
     private TextView status,time,play,projectLabel,exportButton,emptyPreview;
     private TimelineCanvas timeline;
     private HorizontalScrollView timelineScroll;
@@ -121,7 +124,7 @@ public final class EditorActivity extends Activity {
     private void refreshProject() {
         selected=Math.max(0,Math.min(selected,project.clips.size()-1));
         if(projectLabel!=null)projectLabel.setText(project.name+"  ▾");
-        if(timeline!=null){timeline.requestLayout();timeline.invalidate();}
+        if(timeline!=null){timeline.getLayoutParams().height=dp(40+lanes().size()*32+56);timeline.requestLayout();timeline.invalidate();}
         if(monitor!=null)monitor.requestLayout();if(emptyPreview!=null)emptyPreview.setVisibility(project.clips.isEmpty()?View.VISIBLE:View.GONE);renderInspector();syncPosition();
     }
     private void syncPosition(){if(time!=null)time.setText(clock(project.playheadMs)+"  /  "+clock(project.durationMs()));if(timeline!=null)timeline.invalidate();}
@@ -148,7 +151,9 @@ public final class EditorActivity extends Activity {
             LinearLayout center=column();center.setPadding(dp(4),dp(4),dp(6),dp(4));body.addView(center,new LinearLayout.LayoutParams(0,-1,1));
             center.addView(buildMonitor(),new LinearLayout.LayoutParams(-1,0,1));center.addView(transport());center.addView(buildTimeline(),new LinearLayout.LayoutParams(-1,dp(c.screenHeightDp<550?140:176)));
             ScrollView tools=new ScrollView(this);tools.setFillViewport(false);inspector=column();inspector.setPadding(dp(10),dp(10),dp(10),dp(12));tools.addView(inspector);tools.setBackgroundColor(PANEL);
-            body.addView(tools,new LinearLayout.LayoutParams(dp(c.screenWidthDp<1000?250:300),-1));
+            View divider=new View(this);divider.setBackgroundColor(0xFF284B60);divider.setContentDescription("Drag to resize tool panel");body.addView(divider,new LinearLayout.LayoutParams(dp(8),-1));
+            body.addView(tools,new LinearLayout.LayoutParams(dp(Math.min(inspectorWidth,c.screenWidthDp<1000?250:500)),-1));
+            divider.setOnTouchListener(new View.OnTouchListener(){float down;int initial;public boolean onTouch(View v,MotionEvent e){if(e.getAction()==MotionEvent.ACTION_DOWN){down=e.getRawX();initial=tools.getWidth();return true;}if(e.getAction()==MotionEvent.ACTION_MOVE){int width=Math.max(dp(180),Math.min(body.getWidth()/2,initial+(int)(down-e.getRawX())));tools.getLayoutParams().width=width;tools.requestLayout();inspectorWidth=Math.round(width/getResources().getDisplayMetrics().density);return true;}return true;}});
         } else {
             LinearLayout content=column();content.setPadding(dp(8),0,dp(8),0);
             boolean compact=c.screenHeightDp<700;
@@ -184,7 +189,8 @@ public final class EditorActivity extends Activity {
         controls.addView(button("−",v->{pixelsPerSecond=Math.max(8,pixelsPerSecond/1.5f);timeline.requestLayout();}));
         controls.addView(button("+",v->{pixelsPerSecond=Math.min(240,pixelsPerSecond*1.5f);timeline.requestLayout();}));return controls;
     }
-    private View buildTimeline(){timelineScroll=new HorizontalScrollView(this);timelineScroll.setFillViewport(true);timeline=new TimelineCanvas();timelineScroll.addView(timeline,new HorizontalScrollView.LayoutParams(-2,-1));return timelineScroll;}
+    private java.util.List<Integer> lanes(){java.util.List<Integer> list=new ArrayList<>();list.add(0);for(int i=1;i<8;i++){final int t=i;if(project.clips.stream().anyMatch(c->c.track==t))list.add(i);}return list;}
+    private View buildTimeline(){ScrollView vertical=new ScrollView(this);timelineScroll=new HorizontalScrollView(this);timelineScroll.setFillViewport(true);timeline=new TimelineCanvas();timelineScroll.addView(timeline,new HorizontalScrollView.LayoutParams(-2,dp(40+lanes().size()*32+56)));vertical.addView(timelineScroll);return vertical;}
     private EditProject.Clip clip(){return project.clips.isEmpty()?null:project.clips.get(selected);}
     private void renderInspector() {
         if(inspector==null)return;inspector.removeAllViews();
@@ -194,7 +200,7 @@ public final class EditorActivity extends Activity {
         if(tab==0) {
             inspector.addView(note("Videos and images are copied into this app so saved projects can reopen reliably."));
             addAction("+ Import video / image",()->pick(IMPORT,"*/*"));
-            addAction("+ Import music",()->pick(MUSIC,"audio/*"));
+            addAction("+ Import music",()->pick(MUSIC,"audio/*"));addAction("+ Import independent audio layer",()->pick(AUDIO_LAYER,"audio/*"));
             for(int i=0;i<project.clips.size();i++){final int index=i;EditProject.Clip c=project.clips.get(i);
                 addAction((i==selected?"●  ":"")+(i+1)+"  "+c.name+"  ·  "+clock(c.durationMs()),()->{selected=index;tab=1;seek(project.placements().get(index).startMs);renderInspector();});}
         } else if(tab==1) {
@@ -202,15 +208,20 @@ public final class EditorActivity extends Activity {
             inspector.addView(note((selected+1)+" / "+project.clips.size()+"  •  "+c.name));
             inspector.addView(note("In "+seconds(c.inMs)+" s   Out "+seconds(c.outMs)+" s"));
             addAction("Trim / image duration",()->trimDialog());
+            addAction("Layer / timeline start",()->placementDialog());
+            addAction("Transform / keyframes",()->transformDialog());
+            if(!c.image){addAction("Extract audio from video",()->extractAudio());addAction("Audio fades",()->fadeDialog());addAction("Load audio waveform",()->loadWaveform(c));}
             addAction("Split at playhead",()->{if(!editable())return;try{long position=project.playheadMs;remember();project.split(selected,position);changed("Clip split");}catch(Exception e){tell(e.getMessage());}});
             LinearLayout order=row();order.addView(button("← Earlier",v->moveClip(-1)),new LinearLayout.LayoutParams(0,dp(48),1));order.addView(button("Later →",v->moveClip(1)),new LinearLayout.LayoutParams(0,dp(48),1));inspector.addView(order);
-            addAction("Duplicate clip",()->{if(!editable())return;if(project.clips.size()>=100){tell("This preview supports up to 100 clips.");return;}remember();project.clips.add(selected+1,c.copy());selected++;changed("Clip duplicated");});
+            addAction("Duplicate clip",()->{if(!editable())return;if(project.clips.size()>=100){tell("This preview supports up to 100 clips.");return;}remember();EditProject.Clip copy=c.copy();if(copy.track>0)copy.startMs=project.placements().get(selected).endMs;project.clips.add(selected+1,copy);try{project.validate();}catch(Exception e){project.clips.remove(copy);tell(e.getMessage());return;}selected++;changed("Clip duplicated");});
             addAction("Remove clip",()->{if(!editable())return;remember();project.clips.remove(selected);changed("Clip removed • Undo is available");});
             slider("Clip volume",c.volume,value->{remember();c.volume=value;changed("Clip volume updated");});
             addAction("Undo",()->undo(false));addAction("Redo",()->undo(true));
         } else if(tab==2) {
             EditProject.Clip c=clip();if(c==null){inspector.addView(note("Select a clip to apply an effect."));return;}
             inspector.addView(note("Selected: "+c.name));
+            addAction("Animate transform / effect",()->transformDialog());
+            addAction("Chroma key / edge controls",()->chromaDialog());
             select("Effect",EngineSettings.EFFECTS,c.effect,index->{remember();c.effect=index;changed("Effect applied");});
             slider("Intensity",c.intensity,value->{remember();c.intensity=value;changed("Effect strength updated");});
             slider("Opacity",c.opacity,value->{remember();c.opacity=value;changed("Opacity updated");});
@@ -221,7 +232,7 @@ public final class EditorActivity extends Activity {
             inspector.addView(note("Overlap is limited to half of either neighboring clip. Last-clip transitions wait for a following clip."));
         } else if(tab==3) {
             addAction("+ Add text overlay",()->overlayDialog(null));addAction("+ Add image overlay",()->pick(OVERLAY,"image/*"));
-            for(EditProject.Overlay o:project.overlays)addAction((o.imageUri==null?"Text: "+o.text:"Image overlay")+" · "+seconds(o.startMs)+"–"+seconds(o.endMs)+" s",()->overlayDialog(o));
+            for(EditProject.Overlay o:project.overlays)addAction((o.imageUri==null?"Text: "+o.text:"Image overlay")+" · "+seconds(o.startMs)+"–"+seconds(o.endMs)+" s",()->new AlertDialog.Builder(this).setTitle("Overlay").setItems(new String[]{"Edit text / image","Animate keyframes"},(d,i)->{if(i==0)overlayDialog(o);else motionDialog(o.motion,Math.max(0,project.playheadMs-o.startMs),o.endMs-o.startMs,new float[]{o.x,o.y,o.scale,0,o.opacity,0},false);}).show());
             addAction(project.music==null?"+ Import music":"Music: "+project.music.name,()->{if(project.music==null)pick(MUSIC,"audio/*");else musicDialog();});
         } else {
             select("Project canvas",new String[]{"Landscape 16:9","Portrait 9:16"},project.portrait?1:0,index->{remember();project.portrait=index==1;changed("Project aspect updated");});
@@ -229,9 +240,11 @@ public final class EditorActivity extends Activity {
             addAction("Workspace: "+mode.name(),()->chooseMode());
             addAction("Snap to clip edges: "+(snapping?"ON":"OFF"),()->{snapping=!snapping;renderInspector();});
             addAction("Save project",()->{saveNow();tell("Saving project…");});
+            addAction("Export project + media bundle",()->{if(!editable())return;Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/zip").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"Black-Ice-project.bc1zip");startActivityForResult(i,BACKUP);});
+            addAction("Restore project bundle",()->pick(RESTORE,"*/*"));
             addAction("Projects / New / Rename",()->projectsMenu());
             addAction("Open v0.3 effects lab",()->startActivity(new Intent(this,WorkbenchActivity.class)));
-            inspector.addView(note("BC-1 v0.4 Preview\nExport: H.264 MP4 + AAC, 1080p, up to 30 fps. Lower-rate sources keep their cadence.\nSpace: play/pause • Ctrl+Z: undo • Ctrl+S: save\n3D Page Curl remains excluded."));
+            inspector.addView(note("BC-1 v0.5 Preview\nExport: H.264 MP4 + AAC, 1080p, up to 30 fps. Lower-rate sources keep their cadence.\nSpace: play • Ctrl+Z/Y: undo/redo • Ctrl+S: save\nS: split • arrows: frame step • Ctrl+D: duplicate\nCtrl+wheel: zoom • Shift+wheel: scroll • right-click: clip menu\n3D Page Curl remains excluded."));
         }
     }
     private void moveClip(int delta){if(!editable())return;int next=selected+delta;if(next<0||next>=project.clips.size())return;remember();project.move(selected,delta);selected=next;changed("Clip moved");}
@@ -286,18 +299,20 @@ public final class EditorActivity extends Activity {
     }
     @Override protected void onActivityResult(int request,int result,Intent data) {
         super.onActivityResult(request,result,data);if(result!=RESULT_OK||data==null)return;
+        if(request==BACKUP||request==RESTORE){if(data.getData()!=null)bundle(request,data.getData());return;}
         if(request==EXPORT){if(data.getData()!=null){
             try{getContentResolver().takePersistableUriPermission(data.getData(),Intent.FLAG_GRANT_WRITE_URI_PERMISSION);}catch(SecurityException ignored){/* Some providers grant access for the current task only. */}
             startExport(data.getData());}return;}
-        if(request!=IMPORT&&request!=MUSIC&&request!=OVERLAY)return;
+        if(request!=IMPORT&&request!=MUSIC&&request!=OVERLAY&&request!=AUDIO_LAYER)return;
         java.util.List<Uri> uris=new ArrayList<>();if(data.getClipData()!=null){for(int i=0;i<data.getClipData().getItemCount();i++)uris.add(data.getClipData().getItemAt(i).getUri());}else if(data.getData()!=null)uris.add(data.getData());
         if(uris.isEmpty())return;importing=true;tell("Importing media copies…");
         io.execute(()->{
             java.util.List<EditProject.Clip> imported=new ArrayList<>();java.util.List<String> errors=new ArrayList<>();
-            for(Uri uri:uris)try{imported.add(new MediaImporter(this).importClip(uri,request==MUSIC,request==OVERLAY?1024:2048));}catch(Exception e){errors.add(e.getMessage());}
+            for(Uri uri:uris)try{imported.add(new MediaImporter(this).importClip(uri,(request==MUSIC||request==AUDIO_LAYER),request==OVERLAY?1024:2048));}catch(Exception e){errors.add(e.getMessage());}
             main.post(()->{importing=false;if(isDestroyed())return;remember();
                 for(EditProject.Clip c:imported){
-                    if(request==MUSIC){EditProject.Music m=new EditProject.Music();m.uri=c.uri;m.name=c.name;m.sourceDurationMs=c.sourceDurationMs;m.outMs=c.outMs;project.music=m;tab=3;}
+                    if(request==AUDIO_LAYER){try{c.track=project.freeAudioTrack(project.playheadMs,c.durationMs());c.startMs=project.playheadMs;project.clips.add(c);selected=project.clips.size()-1;tab=1;}catch(Exception e){errors.add(e.getMessage());}}
+                    else if(request==MUSIC){EditProject.Music m=new EditProject.Music();m.uri=c.uri;m.name=c.name;m.sourceDurationMs=c.sourceDurationMs;m.outMs=c.outMs;project.music=m;tab=3;}
                     else if(request==OVERLAY){EditProject.Overlay o=new EditProject.Overlay();o.imageUri=c.uri;o.startMs=project.playheadMs;o.endMs=Math.max(o.startMs+100,Math.min(project.durationMs(),o.startMs+3000));project.overlays.add(o);tab=3;}
                     else {if(project.clips.size()>=100){errors.add("The 100-clip project limit was reached.");new File(Uri.parse(c.uri).getPath()).delete();continue;}project.clips.add(c);selected=project.clips.size()-1;}
                 }
@@ -319,7 +334,42 @@ public final class EditorActivity extends Activity {
             main.post(()->{exportLaunching=false;try{startForegroundService(new Intent(this,ExportService.class).putExtra("project",file.getAbsolutePath()).putExtra("destination",destination.toString()));message="Export started";}catch(Exception e){file.delete();tell("Cannot start export: "+e.getMessage());}});
         }catch(Exception e){main.post(()->{exportLaunching=false;tell("Cannot prepare export: "+e.getMessage());});}});
     }
-    @Override public boolean onKeyDown(int key,KeyEvent event){if(event.isCtrlPressed()&&key==KeyEvent.KEYCODE_S){saveNow();return true;}if(event.isCtrlPressed()&&key==KeyEvent.KEYCODE_Z){undo(event.isShiftPressed());return true;}if(key==KeyEvent.KEYCODE_SPACE&&event.getRepeatCount()==0){togglePlay();return true;}return super.onKeyDown(key,event);}
+    @Override public boolean onKeyDown(int key,KeyEvent event){
+        if(getCurrentFocus() instanceof EditText)return super.onKeyDown(key,event);
+        if(event.isCtrlPressed()&&key==KeyEvent.KEYCODE_S){saveNow();return true;}
+        if(event.isCtrlPressed()&&(key==KeyEvent.KEYCODE_Z||key==KeyEvent.KEYCODE_Y)){undo(key==KeyEvent.KEYCODE_Y||event.isShiftPressed());return true;}
+        if(key==KeyEvent.KEYCODE_SPACE&&event.getRepeatCount()==0){togglePlay();return true;}
+        if(key==KeyEvent.KEYCODE_D&&event.isCtrlPressed()){duplicateSelected();return true;}
+        if(key==KeyEvent.KEYCODE_S&&!event.isCtrlPressed()){if(editable()&&clip()!=null)try{remember();project.split(selected,project.playheadMs);changed("Clip split");}catch(Exception e){tell(e.getMessage());}return true;}
+        if(key==KeyEvent.KEYCODE_DPAD_LEFT||key==KeyEvent.KEYCODE_DPAD_RIGHT){seek(project.playheadMs+(key==KeyEvent.KEYCODE_DPAD_LEFT?-1:1)*(event.isShiftPressed()?1000:33));return true;}
+        if(key==KeyEvent.KEYCODE_FORWARD_DEL){if(editable()&&clip()!=null){remember();project.clips.remove(selected);changed("Clip removed");}return true;}
+        return super.onKeyDown(key,event);
+    }
+    private void duplicateSelected(){EditProject.Clip c=clip();if(c==null||!editable())return;EditProject.Clip copy=c.copy();if(c.track>0)copy.startMs=project.placements().get(selected).endMs;remember();project.clips.add(selected+1,copy);try{project.validate();selected++;changed("Clip duplicated");}catch(Exception e){project.clips.remove(copy);tell(e.getMessage());}}
+    private void placementDialog(){EditProject.Clip c=clip();if(c==null||!editable())return;LinearLayout f=form();EditText track=field(f,"0: main sequence · 1–3: video layers · 4–7: audio",String.valueOf(c.track)),start=field(f,"Timeline start (seconds; independent layers)",seconds(project.placements().get(selected).startMs));dialog("Layer placement",f,()->{int t=Integer.parseInt(track.getText().toString());long ms=parseMs(start.getText().toString());remember();project.setPlacement(selected,t,ms);changed("Layer placement updated");},null);}
+    private void fadeDialog(){EditProject.Clip c=clip();LinearLayout f=form();EditText in=field(f,"Fade in (seconds)",seconds(c.fadeInMs)),out=field(f,"Fade out (seconds)",seconds(c.fadeOutMs));dialog("Audio fades",f,()->{long a=parseMs(in.getText().toString()),b=parseMs(out.getText().toString());if(a<0||b<0||a>c.durationMs()||b>c.durationMs())throw new IllegalArgumentException("Fades must fit inside the clip");remember();c.fadeInMs=a;c.fadeOutMs=b;changed("Audio fades updated");},null);}
+    private void extractAudio(){EditProject.Clip source=clip();if(source==null||source.image||!editable())return;
+        CheckBox mute=new CheckBox(this);mute.setText("Mute original video");mute.setTextColor(TEXT);mute.setChecked(true);
+        new AlertDialog.Builder(this).setTitle("Extract independent audio").setView(mute).setPositiveButton("Extract",(d,w)->{long start=project.placements().get(selected).startMs;importing=true;io.execute(()->{try{if(!AudioWaveform.hasAudio(this,source.uri))throw new IllegalArgumentException("This source has no audio track");main.post(()->{importing=false;if(isDestroyed())return;try{EditProject.Clip audio=source.copy();audio.name=source.name+" • audio";audio.track=project.freeAudioTrack(start,audio.durationMs());audio.startMs=start;audio.transition=-1;remember();project.clips.add(audio);if(mute.isChecked())source.volume=0;selected=project.clips.size()-1;changed("Audio extracted independently");loadWaveform(audio);}catch(Exception e){tell(e.getMessage());}});}catch(Exception e){main.post(()->{importing=false;tell(e.getMessage());});}});}).setNegativeButton("Cancel",null).show();
+    }
+    private void loadWaveform(EditProject.Clip c){if(waveforms.containsKey(c.uri)){tell("Waveform ready");return;}tell("Decoding audio waveform…");io.execute(()->{try{float[] peaks=AudioWaveform.read(this,c.uri,c.sourceDurationMs);main.post(()->{waveforms.put(c.uri,peaks);if(timeline!=null)timeline.invalidate();tell("Waveform ready");});}catch(Exception e){main.post(()->tell("Waveform: "+e.getMessage()));}});}
+    private void bundle(int request,Uri uri){if(!editable())return;saveNow();EditProject snapshot=ProjectStore.snapshot(project);importing=true;tell(request==BACKUP?"Saving project and media…":"Restoring project and media…");io.execute(()->{try{if(request==BACKUP){ProjectBundle.write(this,snapshot,getContentResolver().openOutputStream(uri,"wt"));main.post(()->{importing=false;tell("Project bundle saved");});}else{EditProject restored=ProjectBundle.read(this,getContentResolver().openInputStream(uri));main.post(()->{importing=false;if(isDestroyed())return;releasePreview();project=restored;undo.clear();redo.clear();selected=0;changed("Project restored as a new copy");});}}catch(Exception e){if(request==BACKUP)try{android.provider.DocumentsContract.deleteDocument(getContentResolver(),uri);}catch(Exception ignored){}main.post(()->{importing=false;tell("Bundle failed: "+e.getMessage());});}});}
+    private void chromaDialog(){EditProject.Clip c=clip();if(c==null||!editable())return;LinearLayout f=form();CheckBox enabled=new CheckBox(this);enabled.setText("Enable chroma key");enabled.setTextColor(TEXT);enabled.setChecked(c.chroma);f.addView(enabled);EditText color=field(f,"Key color (#RRGGBB)",String.format(java.util.Locale.ROOT,"#%06X",c.keyColor&0xFFFFFF)),t=field(f,"Tolerance 0–1",String.valueOf(c.keyTolerance)),soft=field(f,"Edge softness 0.001–1",String.valueOf(c.keySoftness)),spill=field(f,"Spill removal 0–1",String.valueOf(c.keySpill));dialog("Chroma key",f,()->{int rgb=Color.parseColor(color.getText().toString());float a=parseFloat(t),b=parseFloat(soft),z=parseFloat(spill);if(a<0||a>1||b<.001f||b>1||z<0||z>1)throw new IllegalArgumentException("Check key limits");remember();c.chroma=enabled.isChecked();c.keyColor=rgb;c.keyTolerance=a;c.keySoftness=b;c.keySpill=z;changed("Chroma key updated");},null);}
+    private void transformDialog(){EditProject.Clip c=clip();if(c==null||!editable())return;new AlertDialog.Builder(this).setTitle("Transform & motion").setItems(new String[]{"Static transform","Keyframes / curve editor"},(d,i)->{
+        if(i==1){motionDialog(c.motion,Math.max(c.inMs,Math.min(c.outMs,project.playheadMs-project.placements().get(selected).startMs+c.inMs)),c.sourceDurationMs,new float[]{c.x,c.y,c.scale,c.rotation,c.opacity,c.intensity},true);return;}
+        LinearLayout f=form();EditText x=field(f,"X: −2 to 2",String.valueOf(c.x)),y=field(f,"Y: −2 to 2",String.valueOf(c.y)),scale=field(f,"Scale: 0.05 to 4",String.valueOf(c.scale)),rotation=field(f,"Rotation (degrees)",String.valueOf(c.rotation));dialog("Transform",f,()->{float a=parseFloat(x),b=parseFloat(y),z=parseFloat(scale),r=parseFloat(rotation);if(!Motion.allowed(0,a)||!Motion.allowed(1,b)||!Motion.allowed(2,z)||!Motion.allowed(3,r))throw new IllegalArgumentException("Transform out of range");remember();c.x=a;c.y=b;c.scale=z;c.rotation=r;changed("Transform updated");},null);
+    }).show();}
+    private void motionDialog(Motion motion,long current,long limit,float[] defaults,boolean effects){String[] properties=effects?Motion.PROPERTIES:java.util.Arrays.copyOf(Motion.PROPERTIES,5);new AlertDialog.Builder(this).setTitle("Animate property").setItems(properties,(d,property)->{
+        java.util.List<Motion.Key> keys=motion.curves.get(property);String[] choices=new String[keys.size()+1];choices[0]="+ Key at playhead";for(int n=0;n<keys.size();n++)choices[n+1]=seconds(keys.get(n).timeMs)+" s → "+keys.get(n).value;
+        new AlertDialog.Builder(this).setTitle(properties[property]+" • source-time keys").setItems(choices,(dialog,index)->keyDialog(motion,property,index==0?new Motion.Key(current,motion.value(property,current,defaults[property])):keys.get(index-1).copy(),limit,index==0?null:keys.get(index-1))).show();
+    }).show();}
+    private void keyDialog(Motion motion,int property,Motion.Key key,long limit,Motion.Key existing){LinearLayout f=form();EditText time=field(f,"Source time (seconds)",seconds(key.timeMs)),value=field(f,Motion.PROPERTIES[property]+" value",String.valueOf(key.value));
+        EditText x1=field(f,"Curve X1 (0–1)",String.valueOf(key.x1)),y1=field(f,"Curve Y1 (0–1)",String.valueOf(key.y1)),x2=field(f,"Curve X2 (0–1)",String.valueOf(key.x2)),y2=field(f,"Curve Y2 (0–1)",String.valueOf(key.y2));
+        CurveView curve=new CurveView(key,()->{x1.setText(String.valueOf(key.x1));y1.setText(String.valueOf(key.y1));x2.setText(String.valueOf(key.x2));y2.setText(String.valueOf(key.y2));});f.addView(curve,new LinearLayout.LayoutParams(-1,dp(180)));
+        LinearLayout presets=row();String[] names={"Linear","Ease in","Ease out","Smooth"};float[][] points={{0,0,1,1},{.42f,0,1,1},{0,0,.58f,1},{.42f,0,.58f,1}};for(int i=0;i<names.length;i++){final int n=i;presets.addView(button(names[i],v->{float[] a=points[n];key.x1=a[0];key.y1=a[1];key.x2=a[2];key.y2=a[3];x1.setText(""+a[0]);y1.setText(""+a[1]);x2.setText(""+a[2]);y2.setText(""+a[3]);curve.invalidate();}),new LinearLayout.LayoutParams(0,dp(48),1));}f.addView(presets);f.addView(note("Drag the blue handles. This curve controls the interval after this key."));
+        dialog("Keyframe / curve",f,()->{long t=parseMs(time.getText().toString());float val=parseFloat(value);Motion.Key candidate=new Motion.Key(t,val);candidate.x1=parseFloat(x1);candidate.y1=parseFloat(y1);candidate.x2=parseFloat(x2);candidate.y2=parseFloat(y2);Motion check=motion.copy();if(existing!=null)check.curves.get(property).removeIf(k->k.timeMs==existing.timeMs);check.put(property,candidate);check.validate();if(t>limit)throw new IllegalArgumentException("Key must fit inside the source");remember();if(existing!=null)motion.curves.get(property).remove(existing);motion.put(property,candidate);changed("Keyframe saved");},existing==null?null:()->{remember();motion.curves.get(property).remove(existing);changed("Keyframe removed");});
+    }
+    private final class CurveView extends View{final Motion.Key key;final Runnable update;final Paint p=new Paint(3);int handle;CurveView(Motion.Key k,Runnable u){super(EditorActivity.this);key=k;update=u;setContentDescription("Cubic Bézier curve: drag either handle");}protected void onDraw(Canvas c){float w=getWidth()-dp(24),h=getHeight()-dp(24),m=dp(12);c.drawColor(PANEL);p.setColor(MUTED);p.setStrokeWidth(dp(1));c.drawLine(m,h+m,w+m,m,p);p.setColor(CYAN);p.setStrokeWidth(dp(2));float px=m,py=h+m;for(int i=1;i<=80;i++){float x=i/80f,y=Motion.ease(x,key);c.drawLine(px,py,m+x*w,m+(1-y)*h,p);px=m+x*w;py=m+(1-y)*h;}c.drawCircle(m+key.x1*w,m+(1-key.y1)*h,dp(6),p);c.drawCircle(m+key.x2*w,m+(1-key.y2)*h,dp(6),p);}public boolean onTouchEvent(MotionEvent e){float x=Math.max(0,Math.min(1,(e.getX()-dp(12))/(getWidth()-dp(24)))),y=Math.max(0,Math.min(1,1-(e.getY()-dp(12))/(getHeight()-dp(24))));if(e.getAction()==MotionEvent.ACTION_DOWN){handle=Math.hypot(x-key.x1,y-key.y1)<Math.hypot(x-key.x2,y-key.y2)?1:2;getParent().requestDisallowInterceptTouchEvent(true);}if(handle==1){key.x1=x;key.y1=y;}else{key.x2=x;key.y2=y;}update.run();invalidate();if(e.getAction()==MotionEvent.ACTION_UP){getParent().requestDisallowInterceptTouchEvent(false);performClick();}return true;}public boolean performClick(){super.performClick();return true;}}
 
     private final class TimelineCanvas extends View {
         private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -329,18 +379,19 @@ public final class EditorActivity extends Activity {
         private float x(long ms){return dp(12)+ms/1000f*timelineScale();}
         @Override protected void onMeasure(int w,int h){setMeasuredDimension(View.resolveSize(Math.max(dp(280),Math.min(dp(30000),(int)x(project.durationMs())+dp(30))),w),View.MeasureSpec.getSize(h));}
         @Override protected void onDraw(Canvas canvas){
-            canvas.drawColor(PANEL);int height=getHeight();float mainY=dp(35),clipH=dp(42);
+            canvas.drawColor(PANEL);int height=getHeight();float mainY=dp(35),clipH=dp(28);java.util.List<Integer> laneList=lanes();
             paint.setTextSize(dp(10));paint.setTypeface(Typeface.DEFAULT);paint.setColor(MUTED);
             long interval=1000;while(interval/1000f*timelineScale()<dp(55))interval*=2;
             for(long ms=0;ms<=project.durationMs();ms+=interval){float xx=x(ms);canvas.drawText(seconds(ms)+"s",xx,dp(16),paint);canvas.drawLine(xx,dp(21),xx,height,paint);}
             java.util.List<EditProject.Placement> placements=project.placements();
-            for(EditProject.Placement p:placements){float left=x(p.startMs),right=x(p.endMs);paint.setColor(p.index==selected?0xFF226D99:0xFF204057);canvas.drawRoundRect(left,mainY,right,mainY+clipH,dp(5),dp(5),paint);
+            for(EditProject.Placement p:placements){mainY=dp(35+laneList.indexOf(p.clip.track)*32);float left=x(p.startMs),right=x(p.endMs);paint.setColor(p.index==selected?0xFF226D99:0xFF204057);canvas.drawRoundRect(left,mainY,right,mainY+clipH,dp(5),dp(5),paint);
                 paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(p.index==selected?2:1));paint.setColor(p.index==selected?CYAN:0xFF3B677C);canvas.drawRoundRect(left,mainY,right,mainY+clipH,dp(5),dp(5),paint);paint.setStyle(Paint.Style.FILL);
-                canvas.save();canvas.clipRect(left+dp(4),mainY,right-dp(3),mainY+clipH);paint.setColor(TEXT);paint.setTextSize(dp(11));canvas.drawText((p.index+1)+"  "+p.clip.name,left+dp(7),mainY+dp(24),paint);canvas.restore();
+                canvas.save();canvas.clipRect(left+dp(4),mainY,right-dp(3),mainY+clipH);paint.setColor(TEXT);paint.setTextSize(dp(11));canvas.drawText((p.clip.track>=4?"A"+(p.clip.track-3):"V"+p.clip.track)+"  "+p.clip.name,left+dp(7),mainY+dp(19),paint);canvas.restore();
+                float[] peaks=waveforms.get(p.clip.uri);if(peaks!=null){paint.setColor(0xFF74D3C1);for(float xx=left;xx<right;xx+=dp(3)){long source=p.clip.inMs+(long)((xx-left)/(right-left)*p.clip.durationMs());int bin=(int)Math.min(511,source*512/Math.max(1,p.clip.sourceDurationMs));float amplitude=peaks[Math.max(0,bin)]*dp(10);canvas.drawLine(xx,mainY+clipH/2-amplitude,xx,mainY+clipH/2+amplitude,paint);}}
                 if(p.outgoingMs>0){paint.setColor(0x9940BFFF);canvas.drawRect(x(p.endMs-p.outgoingMs),mainY,right,mainY+clipH,paint);}
             }
             paint.setColor(MUTED);paint.setTextSize(dp(10));if(placements.isEmpty())canvas.drawText("IMPORT MEDIA TO BUILD YOUR TIMELINE",dp(12),mainY+dp(23),paint);
-            float overlayY=mainY+clipH+dp(9);
+            float overlayY=dp(35+laneList.size()*32+4);
             for(EditProject.Overlay o:project.overlays){paint.setColor(0xFF72549B);canvas.drawRoundRect(x(o.startMs),overlayY,x(Math.min(o.endMs,project.durationMs())),overlayY+dp(22),dp(3),dp(3),paint);}
             if(project.overlays.isEmpty()){paint.setColor(MUTED);canvas.drawText("OVERLAYS",dp(12),overlayY+dp(15),paint);}
             float audioY=overlayY+dp(28);
@@ -348,12 +399,14 @@ public final class EditorActivity extends Activity {
             else{paint.setColor(MUTED);canvas.drawText("MUSIC",dp(12),audioY+dp(15),paint);}
             paint.setColor(CYAN);paint.setStrokeWidth(dp(2));canvas.drawLine(x(project.playheadMs),0,x(project.playheadMs),height,paint);
         }
+        @Override public boolean onGenericMotionEvent(MotionEvent event){if(event.getAction()==MotionEvent.ACTION_SCROLL){float wheel=event.getAxisValue(MotionEvent.AXIS_VSCROLL);if(event.isCtrlPressed()){pixelsPerSecond=Math.max(8,Math.min(240,pixelsPerSecond*(wheel>0?1.2f:.8333f)));requestLayout();invalidate();}else timelineScroll.smoothScrollBy((int)(-wheel*dp(70)),0);return true;}return super.onGenericMotionEvent(event);}
         @Override public boolean onTouchEvent(android.view.MotionEvent event){
+            if(event.getAction()==MotionEvent.ACTION_DOWN&&event.isButtonPressed(MotionEvent.BUTTON_SECONDARY)){long target=(long)((event.getX()-dp(12))/timelineScale()*1000);int lane=(int)((event.getY()-dp(35))/dp(32));if(lane>=0&&lane<lanes().size())for(EditProject.Placement p:project.placements())if(p.clip.track==lanes().get(lane)&&target>=p.startMs&&target<p.endMs)selected=p.index;seek(target);new AlertDialog.Builder(EditorActivity.this).setTitle("Clip actions").setItems(new String[]{"Edit / trim","Layer placement","Keyframes","Duplicate"},(d,i)->{if(i==0)trimDialog();if(i==1)placementDialog();if(i==2)transformDialog();if(i==3)duplicateSelected();}).show();return true;}
             if(event.getAction()==MotionEvent.ACTION_DOWN){downX=event.getX();dragging=event.getY()<dp(32);if(dragging)getParent().requestDisallowInterceptTouchEvent(true);return true;}
             if(event.getAction()==MotionEvent.ACTION_MOVE&&dragging){long target=(long)((event.getX()-dp(12))/timelineScale()*1000);seek(snapping?project.snap(target,(long)(8000/pixelsPerSecond)):target);return true;}
             if(event.getAction()==MotionEvent.ACTION_UP){long target=(long)((event.getX()-dp(12))/timelineScale()*1000);
                 if(Math.abs(event.getX()-downX)<dp(10)||dragging){
-                    if(!dragging&&event.getY()>=dp(35)&&event.getY()<dp(78)){java.util.List<EditProject.Placement> placements=project.placements();for(int i=placements.size()-1;i>=0;i--){EditProject.Placement p=placements.get(i);if(target>=p.startMs&&target<p.endMs){selected=i;break;}}renderInspector();}
+                    if(!dragging&&event.getY()>=dp(35)&&event.getY()<dp(35+lanes().size()*32)){java.util.List<EditProject.Placement> placements=project.placements();for(int i=placements.size()-1;i>=0;i--){EditProject.Placement p=placements.get(i);if(p.clip.track==lanes().get(Math.min(lanes().size()-1,(int)((event.getY()-dp(35))/dp(32))))&&target>=p.startMs&&target<p.endMs){selected=i;break;}}renderInspector();}
                     seek(snapping?project.snap(target,(long)(8000/pixelsPerSecond)):target);performClick();}
                 dragging=false;getParent().requestDisallowInterceptTouchEvent(false);return true;}
             if(event.getAction()==MotionEvent.ACTION_CANCEL){dragging=false;getParent().requestDisallowInterceptTouchEvent(false);}return true;

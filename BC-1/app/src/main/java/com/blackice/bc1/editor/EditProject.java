@@ -6,7 +6,7 @@ import java.util.UUID;
 
 /** Portable edit decision list. Times are integer milliseconds; media is never modified. */
 public final class EditProject {
-    public static final int SCHEMA = 1;
+    public static final int SCHEMA = 2;
     public static final long MIN_CLIP_MS = 100;
     public String id = UUID.randomUUID().toString(), name = "Untitled project";
     public boolean portrait;
@@ -19,6 +19,10 @@ public final class EditProject {
     public static final class Clip {
         public String id = UUID.randomUUID().toString(), uri, name;
         public boolean image;
+        public int track; public long startMs,fadeInMs,fadeOutMs;
+        public float x,y,scale=1,rotation,keyTolerance=.25f,keySoftness=.08f,keySpill=.5f;
+        public int keyColor=0xFF00FF00; public boolean chroma;
+        public Motion motion=new Motion();
         public long sourceDurationMs, inMs, outMs;
         public int effect, transition = -1, easing = 1;
         public float intensity = .6f, opacity = 1f, volume = .7f;
@@ -26,6 +30,7 @@ public final class EditProject {
         public long durationMs() { return outMs - inMs; }
         public Clip copy() {
             Clip c = new Clip(); c.uri=uri; c.name=name; c.image=image;
+            c.track=track;c.startMs=startMs;c.fadeInMs=fadeInMs;c.fadeOutMs=fadeOutMs;c.x=x;c.y=y;c.scale=scale;c.rotation=rotation;c.chroma=chroma;c.keyColor=keyColor;c.keyTolerance=keyTolerance;c.keySoftness=keySoftness;c.keySpill=keySpill;c.motion=motion.copy();
             c.sourceDurationMs=sourceDurationMs; c.inMs=inMs; c.outMs=outMs;
             c.effect=effect; c.transition=transition; c.easing=easing;
             c.intensity=intensity; c.opacity=opacity; c.volume=volume; c.transitionMs=transitionMs;
@@ -35,7 +40,7 @@ public final class EditProject {
     public static final class Overlay {
         public String id = UUID.randomUUID().toString(), text = "BLACK ICE", imageUri;
         public long startMs, endMs = 3000;
-        public float x=0, y=-.65f, scale=.7f, opacity=1f;
+        public float x=0, y=-.65f, scale=.7f, opacity=1f; public Motion motion=new Motion();
     }
     public static final class Music {
         public String uri, name;
@@ -52,24 +57,22 @@ public final class EditProject {
             incomingMs=incoming; outgoingMs=outgoing;
         }
     }
+    private int nextBase(int i){for(int n=i+1;n<clips.size();n++)if(clips.get(n).track==0)return n;return -1;}
     public long overlapAfter(int i) {
-        if(i<0 || i>=clips.size()-1 || clips.get(i).transition<0) return 0;
-        return Math.max(0,Math.min(clips.get(i).transitionMs,
-                Math.min(clips.get(i).durationMs()/2,clips.get(i+1).durationMs()/2)));
+        if(i<0||i>=clips.size()||clips.get(i).track!=0||clips.get(i).transition<0)return 0;
+        int n=nextBase(i);if(n<0)return 0;
+        return Math.max(0,Math.min(clips.get(i).transitionMs,Math.min(clips.get(i).durationMs()/2,clips.get(n).durationMs()/2)));
     }
     public List<Placement> placements() {
-        List<Placement> result=new ArrayList<>(); long start=0;
-        for(int i=0;i<clips.size();i++) {
-            long incoming=overlapAfter(i-1), outgoing=overlapAfter(i);
-            Placement p=new Placement(clips.get(i),i,start,incoming,outgoing);
-            result.add(p); start=p.endMs-outgoing;
-        }
+        List<Placement> result=new ArrayList<>();long start=0,incoming=0;
+        for(int i=0;i<clips.size();i++){Clip c=clips.get(i);long out=overlapAfter(i);
+            Placement p=new Placement(c,i,c.track==0?start:c.startMs,c.track==0?incoming:0,out);result.add(p);
+            if(c.track==0){start=p.endMs-out;incoming=out;}}
         return result;
     }
-    public long durationMs() {
-        long total=0; for(int i=0;i<clips.size();i++) total+=clips.get(i).durationMs()-overlapAfter(i);
-        return total;
-    }
+    public long durationMs(){long total=0;for(Placement p:placements())total=Math.max(total,p.endMs);return total;}
+    public int freeAudioTrack(long start,long duration){for(int t=4;t<=7;t++){boolean free=true;for(Placement p:placements())if(p.clip.track==t&&p.startMs<start+duration&&p.endMs>start)free=false;if(free)return t;}throw new IllegalArgumentException("All four audio tracks are occupied at this time.");}
+    public void setPlacement(int index,int track,long start){Clip c=clips.get(index);int old=c.track;long oldStart=c.startMs;c.track=track;c.startMs=start;try{validate();}catch(RuntimeException e){c.track=old;c.startMs=oldStart;throw e;}}
     public void trim(int index,long in,long out) {
         Clip c=clips.get(index);
         if(in<0 || out>c.sourceDurationMs || out-in<MIN_CLIP_MS) throw new IllegalArgumentException("Keep at least 0.10 seconds inside the source.");
@@ -80,8 +83,8 @@ public final class EditProject {
         Placement p=placements().get(index); long offset=timelineMs-p.startMs;
         if(offset<MIN_CLIP_MS || p.clip.durationMs()-offset<MIN_CLIP_MS)
             throw new IllegalArgumentException("Place the playhead inside the selected clip, at least 0.10 seconds from either edge.");
-        Clip right=p.clip.copy(); right.inMs+=offset;
-        p.clip.outMs=right.inMs; p.clip.transition=-1;
+        Clip right=p.clip.copy(); right.inMs+=offset;if(right.track>0)right.startMs=p.startMs+offset;
+        p.clip.outMs=right.inMs; p.clip.transition=-1;p.clip.fadeInMs=Math.min(p.clip.fadeInMs,p.clip.durationMs());p.clip.fadeOutMs=0;right.fadeInMs=0;right.fadeOutMs=Math.min(right.fadeOutMs,right.durationMs());
         clips.add(index+1,right);
     }
     public void move(int index,int delta) {
@@ -101,11 +104,16 @@ public final class EditProject {
         if(clips.size()>100 || overlays.size()>20) throw new IllegalArgumentException("Preview supports up to 100 clips and 20 overlays.");
         if(previewHeight!=360 && previewHeight!=540 && previewHeight!=1080) throw new IllegalArgumentException("Invalid preview resolution.");
         for(Clip c:clips) {
+            c.motion.validate();
+            if(c.track<0||c.track>7||c.startMs<0||c.fadeInMs<0||c.fadeOutMs<0||c.fadeInMs>c.durationMs()||c.fadeOutMs>c.durationMs()||!Motion.allowed(0,c.x)||!Motion.allowed(1,c.y)||!Motion.allowed(2,c.scale)||!Motion.allowed(3,c.rotation)||!unit(c.keyTolerance)||!unit(c.keySoftness)||c.keySoftness<.001f||!unit(c.keySpill)||(c.track>=4&&c.image))throw new IllegalArgumentException("Invalid track, transform or fade.");
             if(c.uri==null || c.name==null || c.inMs<0 || c.outMs>c.sourceDurationMs || c.durationMs()<MIN_CLIP_MS
                     || c.effect<0 || c.effect>11 || c.transition< -1 || c.transition>6 || c.easing<0 || c.easing>1
                     || c.transitionMs<0 || c.transitionMs>5000 || !unit(c.intensity) || !unit(c.opacity) || !unit(c.volume))
                 throw new IllegalArgumentException("Invalid clip: "+c.name);
         }
+        List<Placement> ps=placements();
+        for(int i=0;i<ps.size();i++)for(int n=i+1;n<ps.size();n++){Placement a=ps.get(i),b=ps.get(n);if(a.clip.track>0&&a.clip.track==b.clip.track&&a.startMs<b.endMs&&b.startMs<a.endMs)throw new IllegalArgumentException("Clips on the same layer cannot overlap. Use another layer or move the start time.");}
+        for(Overlay o:overlays)o.motion.validate();
         for(Overlay o:overlays) if(o.startMs<0 || o.endMs<=o.startMs || !unit(o.opacity)
                 || !Float.isFinite(o.scale) || o.scale<.1f || o.scale>2 || !Float.isFinite(o.x) || Math.abs(o.x)>1
                 || !Float.isFinite(o.y) || Math.abs(o.y)>1 || o.text==null || o.text.length()>200)

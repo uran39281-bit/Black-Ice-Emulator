@@ -137,7 +137,22 @@ public class VideoEditorTest {
     }
     @Test public void corruptOrFutureProjectDoesNotReplaceSavedProject() throws Exception {
         EditProject p=project(0);String json=ProjectStore.encode(p);ProjectStore store=new ProjectStore(context);store.save(p);
-        try{ProjectStore.decode(json.replace("\"schema\": 1","\"schema\": 999"));fail("Unsupported schema must fail");}catch(org.json.JSONException expected){}
+        try{ProjectStore.decode(json.replace("\"schema\": 2","\"schema\": 999"));fail("Unsupported schema must fail");}catch(org.json.JSONException expected){}
         assertEquals(json,ProjectStore.encode(store.load(p.id)));
+    }
+    @Test public void independentLayerKeyframesCompositeAndChromaKey() throws Exception {
+        EditProject p=project(-1);EditProject.Clip upper=p.clips.get(1);upper.track=1;upper.startMs=500;upper.outMs=1300;upper.scale=.5f;
+        Motion.Key first=new Motion.Key(300,0);first.x1=0;first.y1=0;first.x2=1;first.y2=1;upper.motion.put(4,first);upper.motion.put(4,new Motion.Key(1300,1));
+        File file=export(p,180);try(MediaMetadataRetriever r=new MediaMetadataRetriever()){r.setDataSource(file.getPath());int before=pixel(r,200),early=pixel(r,750),late=pixel(r,1250),after=pixel(r,1750);assertTrue(Color.red(before)>200);assertTrue("Animated blue increases",Color.blue(late)>Color.blue(early)+60);assertTrue("Base returns after overlay ends",Color.red(after)>200&&Color.blue(after)<30);Bitmap frame=r.getFrameAtTime(1000000,MediaMetadataRetriever.OPTION_CLOSEST);int corner=frame.getPixel(280,140);assertTrue("Scaled layer leaves base visible",Color.red(corner)>200&&Color.blue(corner)<30);frame.recycle();}finally{file.delete();}
+        File image=new File(context.getFilesDir(),"key-green.png");Bitmap b=Bitmap.createBitmap(320,180,Bitmap.Config.ARGB_8888);b.eraseColor(Color.GREEN);try(OutputStream out=new FileOutputStream(image)){b.compress(Bitmap.CompressFormat.PNG,100,out);}b.recycle();upper.uri=Uri.fromFile(image).toString();upper.image=true;upper.scale=1;upper.motion=new Motion();upper.chroma=true;
+        file=export(p,180);try(MediaMetadataRetriever r=new MediaMetadataRetriever()){r.setDataSource(file.getPath());int center=pixel(r,1000);assertTrue("Green removed to reveal red base",Color.red(center)>200&&Color.green(center)<40);}finally{file.delete();}
+    }
+    @Test public void projectBundlesRoundTripMediaAndRejectTraversal() throws Exception {
+        EditProject p=project(-1);p.clips.get(1).track=1;p.clips.get(1).startMs=500;p.clips.get(1).motion.put(0,new Motion.Key(0,.4f));ByteArrayOutputStream out=new ByteArrayOutputStream();ProjectBundle.write(context,p,out);EditProject restored=ProjectBundle.read(context,new ByteArrayInputStream(out.toByteArray()));assertNotEquals(p.id,restored.id);assertEquals(1,restored.clips.get(1).track);assertEquals(.4f,restored.clips.get(1).motion.value(0,0,0),0);assertTrue(new File(Uri.parse(restored.clips.get(0).uri).getPath()).isFile());
+        out.reset();try(java.util.zip.ZipOutputStream zip=new java.util.zip.ZipOutputStream(out)){zip.putNextEntry(new java.util.zip.ZipEntry("../escape"));zip.write(1);zip.closeEntry();}try{ProjectBundle.read(context,new ByteArrayInputStream(out.toByteArray()));fail("Traversal must be rejected");}catch(IOException expected){}
+        String legacy=ProjectStore.encode(project(-1)).replace("\"schema\": 2","\"schema\": 1");assertEquals(0,ProjectStore.decode(legacy).clips.get(0).track);
+    }
+    @Test public void audioWaveformDecodesRealPeaks() throws Exception {
+        String uri=fixture("music.wav");float[] peaks=AudioWaveform.read(context,uri,1000);float max=0;for(float peak:peaks)max=Math.max(max,peak);assertTrue(max>.03f&&max<=1);assertTrue(AudioWaveform.hasAudio(context,uri));
     }
 }
