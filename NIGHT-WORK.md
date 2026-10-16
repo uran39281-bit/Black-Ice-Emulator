@@ -1,10 +1,12 @@
 # BC-1 overnight development checkpoint
 
-## Active investigation: bc-1-export-reliability
+## Active candidate: v1.0.4 export diagnostics
 
-Investigation source `664e2f2fbe1a91bdf9f01f7767de34cbcf19ae38`; Actions run `38881066895` is pending. Local cached-dependency compilation and33 JVM tests passed; shell syntax/diff checks passed. These do not substitute for Android tests. Next run: inspect both CI jobs, fetch complete BC1Export cause chain if failing, and examine all three independent MP4 checks if passing. Preserve attempt1 failure evidence from v1.0.3; three successes would improve evidence but not prove universal export stability.
+Continue `bc-1-v1.0.4-diagnostics`. Adds Setup → Export diagnostics → Copy report with a bounded, redacted failure summary (stage, Media3 code, exception class chain; no exception messages/media paths). Last failure persists through later successes. Preparation, encoding and save failures are recorded; cancellations do not replace diagnostics. No renderer/encoder-policy change or automatic retry. New tests cover cause-chain redaction/cycles, missing-media failure cleanup followed by valid export, and actual UI clipboard copying. Three sequential exports plus recovery output must independently decode. Candidate code16/name1.0.4; do not publish until both CI jobs and screenshots pass. Local36 unit tests/Java compile and shell/diff checks pass; Android pending.
 
-Continue this branch for export reliability; v1.0.3 remains the published download. This branch only adds debug-only nested ExportException logging and three consecutive required 1080p service exports, each independently ffmpeg-decoded/ffprobed. No automatic retry, timeout increase, codec-policy change or skipped tests. Waits for foreground-service destruction between exports. It does NOT claim to fix the intermittent muxer error. Artifact is intentionally named `BC-1-export-investigation-DO-NOT-PUBLISH`; manifest still1.0.3/code15, so NEVER publish these changed bytes over v1.0.3. Any qualified product change must use a new version/code/path. Inspect CI logs, especially BC1Export and BC1ExportTest, before choosing a targeted fix.
+## Completed investigation evidence
+
+`bc-1-export-reliability` source664e2f2, Actions38881066895 succeeded:18 Android tests and all THREE independent H.2641920×1080/AAC/duration checks passed, build succeeded. Artifacts GPU12037617816/build12037586895. This did not reproduce or establish the cause of the earlier intermittent muxer failure. Preserve that caveat. Investigation artifact remains DO-NOT-PUBLISH (old manifest), and all older APKs remain intact.
 
 ## Latest published work: v1.0.3 thumbnail reliability
 

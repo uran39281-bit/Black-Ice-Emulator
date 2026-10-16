@@ -51,10 +51,14 @@ public class VideoEditorTest {
         if(error.get()!=null)throw new AssertionError("Export failed for transition "+project.clips.get(0).transition,error.get());assertTrue(file.length()>1000);return file;
     }
     private File serviceExport(EditProject project,boolean cancel) throws Exception {
+        return serviceExport(project,cancel,false);
+    }
+    private File serviceExport(EditProject project,boolean cancel,boolean expectFailure) throws Exception {
         File snapshot=new File(context.getCacheDir(),"export-test-project.json");
         try(OutputStream out=new FileOutputStream(snapshot)){out.write(ProjectStore.encode(project).getBytes(java.nio.charset.StandardCharsets.UTF_8));}
         File destination=new File(context.getCacheDir(),"published-"+System.nanoTime()+".mp4");
-        android.content.SharedPreferences prefs=context.getSharedPreferences(ExportService.PREFS,0);prefs.edit().clear().commit();
+        android.content.SharedPreferences prefs=context.getSharedPreferences(ExportService.PREFS,0);
+        prefs.edit().remove("running").remove("status").remove("success").remove("finishedAt").commit();
         context.getSharedPreferences(EditorActivity.PREFS,0).edit().remove("last-project").commit();
         try(ActivityScenario<EditorActivity> scenario=ActivityScenario.launch(EditorActivity.class)) {
             scenario.onActivity(a->a.startForegroundService(new android.content.Intent(a,ExportService.class).putExtra("project",snapshot.getPath()).putExtra("destination",Uri.fromFile(destination).toString())));
@@ -66,12 +70,28 @@ public class VideoEditorTest {
             while(ExportService.isRunning()&&System.currentTimeMillis()<deadline)Thread.sleep(50);
             assertFalse("Finished export service releases its lifecycle",ExportService.isRunning());
             if(cancel){assertEquals("Export cancelled",prefs.getString("status",""));assertFalse(prefs.getBoolean("success",false));}
+            else if(expectFailure){assertFalse("Broken source must fail",prefs.getBoolean("success",true));assertTrue(prefs.getString("status","").startsWith("Export failed:"));assertFalse(destination.exists());}
             else {assertTrue(prefs.getString("status","Export did not start"),prefs.getBoolean("success",false));assertTrue(destination.length()>1000);}
         }
         return destination;
     }
     @Test public void foregroundExportCanBeCancelledWithoutPublishing() throws Exception {
         File file=serviceExport(project(0),true);assertFalse(file.exists());
+    }
+    @Test public void missingMediaRecordsRedactedCauseAndNextExportRecovers() throws Exception {
+        EditProject broken=project(0);
+        broken.clips.get(0).uri=Uri.fromFile(new File(context.getCacheDir(),"private-missing-video.mp4")).toString();
+        serviceExport(broken,false,true);
+        android.content.SharedPreferences prefs=context.getSharedPreferences(ExportService.PREFS,0);
+        String report=prefs.getString(ExportService.LAST_FAILURE,"");
+        assertTrue(report.contains("ExportException"));assertTrue(report.contains("Stage: encoding"));
+        assertFalse(report.contains("private-missing-video"));assertFalse(report.contains("file://"));
+        File[] leftovers=context.getCacheDir().listFiles((d,n)->n.startsWith("bc1-export-")&&n.endsWith(".mp4"));
+        assertNotNull(leftovers);assertEquals("Failed temporary export removed",0,leftovers.length);
+        File recovered=serviceExport(project(0),false);
+        assertEquals("Success preserves last failure for support",report,prefs.getString(ExportService.LAST_FAILURE,""));
+        File qa=new File(context.getFilesDir(),"qa");qa.mkdirs();
+        java.nio.file.Files.copy(recovered.toPath(),new File(qa,"recovery-1080p.mp4").toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING);recovered.delete();
     }
     @Test public void videoEffectsAndTimedImageOverlayReachTheExport() throws Exception {
         EditProject p=project(-1);p.clips.get(0).effect=4;p.clips.get(0).intensity=1;p.clips.get(1).opacity=0;

@@ -18,8 +18,8 @@ if rg 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed' BC-1/app/build/report
 rg '^OK \([0-9]+ tests?\)' BC-1/app/build/reports/androidTests/instrumentation.txt
 
 # Validate the exported bytes independently of the Android media stack.
-for iteration in 0 1 2; do
-ACCEPTANCE_MP4="BC-1/app/build/reports/androidTests/qa/acceptance-1080p-${iteration}.mp4"
+for name in acceptance-1080p-0 acceptance-1080p-1 acceptance-1080p-2 recovery-1080p; do
+ACCEPTANCE_MP4="BC-1/app/build/reports/androidTests/qa/${name}.mp4"
 ffmpeg -v error -xerror -i "$ACCEPTANCE_MP4" -f null -
 ffprobe -v error -show_streams -show_format -of json "$ACCEPTANCE_MP4" > "${ACCEPTANCE_MP4}.ffprobe.json"
 python3 - "${ACCEPTANCE_MP4}.ffprobe.json" <<'PYVERIFY'

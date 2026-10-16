@@ -319,9 +319,20 @@ public final class EditorActivity extends Activity {
             addAction("Export project + media bundle",()->{if(!editable())return;Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/zip").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"Black-Ice-project.bc1zip");startActivityForResult(i,BACKUP);});
             addAction("Restore project bundle",()->pick(RESTORE,"*/*"));
             addAction("Projects / New / Rename",()->projectsMenu());
+            addAction("Export diagnostics",()->exportDiagnostics());
             addAction("Open v0.3 effects lab",()->startActivity(new Intent(this,WorkbenchActivity.class)));
-            inspector.addView(note("BC-1 v1.0.3\nExport: H.264 MP4 + AAC, 1080p, up to 30 fps. Lower-rate sources keep their cadence.\nSpace: play • Ctrl+Z/Y: undo/redo • Ctrl+S: save\nS: split • arrows: frame step • Ctrl+D: duplicate\nCtrl+wheel: zoom • Shift+wheel: scroll • right-click: clip menu\n3D Page Curl remains excluded."));
+            inspector.addView(note("BC-1 v1.0.4\nExport: H.264 MP4 + AAC, 1080p, up to 30 fps. Lower-rate sources keep their cadence.\nSpace: play • Ctrl+Z/Y: undo/redo • Ctrl+S: save\nS: split • arrows: frame step • Ctrl+D: duplicate\nCtrl+wheel: zoom • Shift+wheel: scroll • right-click: clip menu\n3D Page Curl remains excluded."));
         }
+    }
+    private void exportDiagnostics(){
+        android.content.SharedPreferences prefs=getSharedPreferences(ExportService.PREFS,MODE_PRIVATE);
+        String report="BC-1 v1.0.4 • Android API "+android.os.Build.VERSION.SDK_INT+"\n\n"+
+                prefs.getString(ExportService.LAST_FAILURE,"No export failure recorded.")+"\n\n"+
+                "Last failure is retained after successful exports. This summary excludes media names, paths and exception messages.";
+        new AlertDialog.Builder(this).setTitle("Export diagnostics").setMessage(report)
+                .setPositiveButton("Copy report",(d,w)->{((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE))
+                    .setPrimaryClip(android.content.ClipData.newPlainText("BC-1 export diagnostics",report));tell("Export diagnostics copied");})
+                .setNegativeButton("Close",null).show();
     }
     private void moveClip(int delta){if(!editable())return;int next=selected+delta;if(next<0||next>=project.clips.size())return;remember();project.move(selected,delta);selected=next;changed("Clip moved");}
     private void trimDialog() {

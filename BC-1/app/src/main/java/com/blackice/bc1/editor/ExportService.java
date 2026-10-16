@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class ExportService extends Service {
     public static final String ACTION_CANCEL="com.blackice.bc1.CANCEL_EXPORT";
     public static final String PREFS="bc1-export";
+    public static final String LAST_FAILURE="lastFailure";
     private final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService io=Executors.newSingleThreadExecutor();
     private final AtomicBoolean cancelled=new AtomicBoolean();
@@ -59,31 +60,39 @@ public final class ExportService extends Service {
                             .setRequestedVideoEncoderSettings(new VideoEncoderSettings.Builder().setBitrate(8_000_000).build()).build())
                     .addListener(new Transformer.Listener(){
                         @Override public void onCompleted(Composition c,ExportResult result) {publish();}
-                        @Override public void onError(Composition c,ExportResult r,ExportException e) {exportFailed(e);}
+                        @Override public void onError(Composition c,ExportResult r,ExportException e) {exportFailed("encoding",e);}
                     }).build();
             transformer.start(CompositionFactory.build(this,project,true),output.getAbsolutePath());main.post(poll);
-        } catch(Exception e) {exportFailed(e);}
+        } catch(Exception e) {exportFailed("preparation",e);}
         return START_NOT_STICKY;
     }
-    private void exportFailed(Exception error) {
+    private void recordFailure(String stage,Exception error) {
         // Preserve nested codec/muxer causes for device QA, only in debuggable builds.
         // Do not change encoder policy or mask a failure with an automatic retry.
         if((getApplicationInfo().flags&android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0)
             android.util.Log.e("BC1Export","Export failed",error);
+        int code=error instanceof ExportException?((ExportException)error).errorCode:0;
+        getSharedPreferences(PREFS,MODE_PRIVATE).edit()
+                .putString(LAST_FAILURE,ExportDiagnostics.describe(stage,error,code))
+                .putLong("lastFailureAt",System.currentTimeMillis()).apply();
+    }
+    private void exportFailed(String stage,Exception error) {
+        recordFailure(stage,error);
         finish("Export failed: "+error.getMessage(),false);
     }
     private void publish() {
         copying=true;main.removeCallbacks(poll);update("Saving MP4…",100);
         io.execute(()->{
-            String error=null;
+            Exception error=null;
             try(InputStream in=new FileInputStream(output);OutputStream out=getContentResolver().openOutputStream(destination,"wt")) {
                 if(out==null)throw new IOException("Destination cannot be opened.");
                 byte[] data=new byte[256*1024];int n;
                 while((n=in.read(data))!=-1) {if(cancelled.get())throw new IOException("Cancelled");out.write(data,0,n);}
                 out.flush();
-            } catch(Exception e) {error=e.getMessage();}
-            final String failure=error;
-            main.post(()->finish(cancelled.get()?"Export cancelled":failure==null?"MP4 saved • 1080p / up to 30 fps":"Save failed: "+failure,failure==null&&!cancelled.get()));
+            } catch(Exception e) {error=e;}
+            final Exception failure=error;
+            main.post(()->{if(failure!=null&&!cancelled.get())recordFailure("saving",failure);
+                finish(cancelled.get()?"Export cancelled":failure==null?"MP4 saved • 1080p / up to 30 fps":"Save failed: "+failure.getMessage(),failure==null&&!cancelled.get());});
         });
     }
     private void cancelExport() {
