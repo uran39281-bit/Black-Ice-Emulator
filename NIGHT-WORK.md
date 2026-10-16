@@ -1,6 +1,14 @@
-# Active development: bc-1-v1.0.2-media
+# Latest verified development: bc-1-v1.0.2-media
 
-Read NIGHT-WORK.md on `bc-1-v1.0.2-media` for the newest work. Candidate source `5e551384278f03270258ff7149c4f36a3fe0d1ce`, Actions run `38871745189`. Adds a V1 two-column desktop media browser, real type filters/search, recreation state and synchronized selection. Local compilation and 33 unit tests passed before the small selection-highlight follow-up. Full Android checks and screenshot review are pending; do not publish the candidate until verified. v1.0.1 below remains the latest verified APK.
+Read NIGHT-WORK.md on `bc-1-v1.0.2-media` before continuing. Latest checkpoint `967a884d791fb643809f0ae2ff6bef3fd2ad4c01`; tested source `5e551384278f03270258ff7149c4f36a3fe0d1ce`; Actions `38871745189`: 33 unit +17 Android tests passed, lint0errors30warnings, independent MP4 decode passed. Phone/wide/filtered-wide/compact-wide screenshots reviewed.
+
+v1.0.2 is published with the retained signing identity:
+https://raw.githubusercontent.com/uran39281-bit/bc-1/main/v1.0.2/BC-1-v1.0.2.apk
+SHA256 `de63efff3bd6442e26419ae1693c0196d79a98219a1b1edfdf014c96bce3fa34`; versionCode14/name1.0.2. Old APKs preserved; raw download byte-compared successfully.
+
+New: V1 two-column desktop media browser, All/Video/Audio/Image filters, filename search, correct filtered clip selection, synchronized selection highlights, and query/filter restoration after recreation. No effects/schema changes. Physical Snapdragon/DeX testing remains outstanding. Continue only useful tested improvements; the newest branch checkpoint records next steps and limits.
+
+Earlier release checkpoints below are historical.
 
 ---
 
