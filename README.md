@@ -1,3 +1,9 @@
+# BC-1 v1.0 is available
+
+[Download the Android APK](https://raw.githubusercontent.com/uran39281-bit/bc-1/main/v1.0/BC-1-v1.0.apk) · [Separate APK repository](https://github.com/uran39281-bit/bc-1) · [QA and checksum](https://github.com/uran39281-bit/bc-1/tree/main/v1.0)
+
+Continues the v0.2 Dual Workspace foundation with the dark/cyan V1 interface, UI Lock, phone and tablet/DeX layouts, thumbnail timeline, media browser, layered effects/keyframes, cached previews and 1080p export. 30 unit tests +17 Android tests passed; exported MP4 independently decoded. Physical Snapdragon/DeX performance remains unmeasured. Old branches and APKs are preserved.
+
 # BC-1 — Black Ice Custom Engine
 
 This development branch contains the BC-1 Android editor under [BC-1/](BC-1/README.md). Current work: v1.0 release candidate, continuing the tested v0.5 Motion & Layers engine. See [the development checkpoint](NIGHT-WORK.md) for build and QA status.

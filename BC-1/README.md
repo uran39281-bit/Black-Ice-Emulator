@@ -1,10 +1,10 @@
-## BC-1 v1.0 — release candidate under final verification
+## BC-1 v1.0 — verified release
 
 Continues the v0.2 Dual Workspace project, retaining its V1 mountain mark, dark navy panels and icy-blue accents. Phone and tablet/DeX workspaces support automatic selection and manual overrides. UI Lock, thumbnail timelines and a desktop media browser are included alongside the v0.5 keyframes, easing curves, layered audio, chroma controls and project bundles. 3D Page Curl remains excluded.
 
 The initial paused-preview issue is fixed and visually verified across phone, large wide and compact wide layouts. Image/multilayer projects prepare a cancellable cached preview; playback/seek then reuse it until the project changes. Long projects take time to prepare. Single-video projects keep direct playback. Export remains H.264/AAC at 1080p through the same GLES effects graph.
 
-Final build version: `1.0.0`, code `12`. Publication remains gated on all 30 unit tests, all 17 Android tests, lint with no errors, and independent decoding of the exported MP4. Physical Snapdragon/DeX performance is not yet measured. APKs are kept separately at https://github.com/uran39281-bit/bc-1 .
+Released build: `1.0.0`, code `12`. All 30 unit tests and 17 Android tests pass; lint has no errors and the exported MP4 independently decodes without errors. [Download v1.0](https://raw.githubusercontent.com/uran39281-bit/bc-1/main/v1.0/BC-1-v1.0.apk). Physical Snapdragon/DeX performance is not yet measured. APKs are kept separately at https://github.com/uran39281-bit/bc-1 .
 
 ## v1.0 RC2 preview reliability
 
