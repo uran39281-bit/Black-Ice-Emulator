@@ -110,7 +110,12 @@ public final class CompositionFactory {
     private static GainProcessor gain(float volume,long duration,long fadeIn,long fadeOut) {
         return new GainProcessor(new GainProcessor.GainProvider() {
             @Override public float getGainFactorAtSamplePosition(long sample,int rate) { long ms=sample*1000/rate;float envelope=1;if(fadeIn>0)envelope=Math.min(envelope,(float)ms/fadeIn);if(fadeOut>0)envelope=Math.min(envelope,(float)(duration-ms)/fadeOut);return volume*Math.max(0,envelope); }
-            @Override public long isUnityUntil(long sample,int rate) { return volume==1&&fadeIn==0&&fadeOut==0?C.TIME_END_OF_SOURCE:C.TIME_UNSET; }
+            @Override public long isUnityUntil(long sample,int rate) {
+                if(volume==1&&fadeIn==0&&fadeOut==0)return C.TIME_END_OF_SOURCE;
+                // GainProcessor calls this whenever the envelope reaches exactly 1,
+                // including its plateau and a single sample crossing at volume > 1.
+                return getGainFactorAtSamplePosition(sample,rate)==1?sample+1:C.TIME_UNSET;
+            }
         });
     }
     /** Upload only when timed overlay visibility changes, not once per decoded frame. */
