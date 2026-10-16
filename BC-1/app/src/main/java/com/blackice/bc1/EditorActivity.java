@@ -38,6 +38,7 @@ public final class EditorActivity extends Activity {
     private int selected=0,tab=0;
     private float pixelsPerSecond=48;
     private boolean active,importing,loading=true,snapping=true,exportLaunching,wasExporting;
+    private long lastExportSeen;
     private String message="Opening workspace…";
     private final ArrayDeque<String> undo=new ArrayDeque<>(),redo=new ArrayDeque<>();
     private final Runnable autosave=()->saveNow();
@@ -47,7 +48,8 @@ public final class EditorActivity extends Activity {
         if(play!=null)play.setText(player!=null&&player.isPlaying()?"Ⅱ  Pause":"▶  Play");
         android.content.SharedPreferences export=getSharedPreferences(ExportService.PREFS,MODE_PRIVATE);
         boolean running=export.getBoolean("running",false);
-        if(wasExporting&&!running&&!exportLaunching){tell(export.getString("status","Export ended"));preparePreview(false);}
+        long completed=export.getLong("finishedAt",0);
+        if(!running&&!exportLaunching&&!loading&&(wasExporting||completed>lastExportSeen)){lastExportSeen=completed;tell(export.getString("status","Export ended"));if(wasExporting)preparePreview(false);}
         wasExporting=running;
         if(exportButton!=null)exportButton.setText(running?"Cancel":"Export");
         if(status!=null)status.setText(running?export.getString("status","Exporting…"):message);
@@ -56,6 +58,9 @@ public final class EditorActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
         store=new ProjectStore(this);
+        android.content.SharedPreferences exportState=getSharedPreferences(ExportService.PREFS,MODE_PRIVATE);
+        if(exportState.getBoolean("running",false)&&!ExportService.isRunning())exportState.edit().putBoolean("running",false)
+                .putBoolean("success",false).putString("status","Previous export was interrupted. Export again to create a complete MP4.").putLong("finishedAt",System.currentTimeMillis()).apply();
         try {mode=LayoutPolicy.Preference.valueOf(getPreferences(MODE_PRIVATE).getString("mode","AUTO"));}catch(Exception ignored){}
         if(state!=null){selected=state.getInt("selected",0);tab=state.getInt("tab",0);}
         buildWorkspace();

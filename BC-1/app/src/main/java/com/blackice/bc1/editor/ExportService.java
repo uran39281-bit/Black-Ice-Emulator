@@ -22,6 +22,8 @@ public final class ExportService extends Service {
     private final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService io=Executors.newSingleThreadExecutor();
     private final AtomicBoolean cancelled=new AtomicBoolean();
+    private static volatile boolean alive;
+    public static boolean isRunning(){return alive;}
     private Transformer transformer;
     private File output;
     private Uri destination;
@@ -34,7 +36,7 @@ public final class ExportService extends Service {
         main.postDelayed(this,500);
     }};
     @Override public IBinder onBind(Intent intent){return null;}
-    @Override public void onCreate(){super.onCreate();getSystemService(NotificationManager.class).createNotificationChannel(new NotificationChannel("bc1-export","Video export",NotificationManager.IMPORTANCE_LOW));}
+    @Override public void onCreate(){super.onCreate();alive=true;File[] leftovers=getCacheDir().listFiles((d,n)->n.startsWith("bc1-export-")&&n.endsWith(".mp4"));if(leftovers!=null)for(File f:leftovers)f.delete();getSystemService(NotificationManager.class).createNotificationChannel(new NotificationChannel("bc1-export","Video export",NotificationManager.IMPORTANCE_LOW));}
     @Override public int onStartCommand(Intent intent,int flags,int startId) {
         if(intent==null){stopSelf();return START_NOT_STICKY;}
         if(ACTION_CANCEL.equals(intent.getAction())) {cancelExport();return START_NOT_STICKY;}
@@ -86,7 +88,7 @@ public final class ExportService extends Service {
         if(!success && destination!=null)try {android.provider.DocumentsContract.deleteDocument(getContentResolver(),destination);}catch(Exception ignored){}
         if(output!=null)output.delete();
         getSharedPreferences(PREFS,MODE_PRIVATE).edit().putBoolean("running",false).putBoolean("success",success)
-                .putString("uri",success?destination.toString():"").putString("status",message).apply();
+                .putString("uri",success?destination.toString():"").putString("status",message).putLong("finishedAt",System.currentTimeMillis()).apply();
         stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();
     }
     private void update(String message,int percent) {
@@ -103,5 +105,5 @@ public final class ExportService extends Service {
                 .setProgress(100,Math.max(0,percent),percent<0).addAction(new Notification.Action.Builder(null,"Cancel",cancel).build()).build();
     }
     @Override public void onTimeout(int startId,int foregroundServiceType) {cancelExport();}
-    @Override public void onDestroy(){main.removeCallbacks(poll);if(transformer!=null&&!finished)transformer.cancel();cancelled.set(true);io.shutdown();super.onDestroy();}
+    @Override public void onDestroy(){alive=false;main.removeCallbacks(poll);if(transformer!=null&&!finished)transformer.cancel();cancelled.set(true);io.shutdown();super.onDestroy();}
 }

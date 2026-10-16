@@ -21,6 +21,7 @@ public final class MediaImporter {
         try(android.database.Cursor c=context.getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)) {
             if(c!=null && c.moveToFirst()) name=c.getString(0);
         }
+        if(name==null||name.isBlank())name="Imported media";
         String mime=context.getContentResolver().getType(uri);
         boolean image=mime!=null && mime.startsWith("image/");
         if(image && audioOnly) throw new IOException("Choose an audio file.");
@@ -37,6 +38,7 @@ public final class MediaImporter {
                     out.write(bytes,0,n);
                 }
             }
+            if(!image&&!audioOnly){BitmapFactory.Options probe=new BitmapFactory.Options();probe.inJustDecodeBounds=true;BitmapFactory.decodeFile(copy.getPath(),probe);image=probe.outWidth>0&&probe.outHeight>0;}
             EditProject.Clip clip=new EditProject.Clip();clip.name=name;clip.image=image;
             if(image) {
                 Bitmap bitmap;
@@ -50,7 +52,7 @@ public final class MediaImporter {
                     options.inSampleSize=1;while(Math.max(options.outWidth,options.outHeight)/options.inSampleSize>maxDimension)options.inSampleSize*=2;
                     options.inJustDecodeBounds=false;bitmap=BitmapFactory.decodeFile(copy.getPath(),options);
                     if(bitmap!=null) {
-                        ExifInterface exif=new ExifInterface(copy.getPath());int orientation=exif.getAttributeInt(ExifInterface.TAG_ORIENTATION,1);
+                        int orientation=1;try{ExifInterface exif=new ExifInterface(copy.getPath());orientation=exif.getAttributeInt(ExifInterface.TAG_ORIENTATION,1);}catch(IOException ignored){/* Some API 26 decoders do not expose EXIF for PNG/BMP. */}
                         Matrix matrix=new Matrix();
                         if(orientation==2)matrix.setScale(-1,1);if(orientation==3)matrix.setRotate(180);if(orientation==4)matrix.setScale(1,-1);
                         if(orientation==5){matrix.setRotate(90);matrix.postScale(-1,1);}if(orientation==6)matrix.setRotate(90);
@@ -59,10 +61,10 @@ public final class MediaImporter {
                     }
                 }
                 if(bitmap==null) throw new IOException("This image format could not be decoded.");
-                File png=new File(directory,copy.getName()+".png");
+                File sourceFile=copy;File png=new File(directory,copy.getName()+".png");copy=png;
                 try(OutputStream out=new FileOutputStream(png)) {if(!bitmap.compress(Bitmap.CompressFormat.PNG,100,out))throw new IOException("Image conversion failed.");}
-                finally {bitmap.recycle();}
-                copy.delete();copy=png;clip.sourceDurationMs=600_000;clip.outMs=3000;
+                finally {bitmap.recycle();sourceFile.delete();}
+                clip.sourceDurationMs=600_000;clip.outMs=3000;
             } else {
                 try(MediaMetadataRetriever metadata=new MediaMetadataRetriever()) {
                     metadata.setDataSource(copy.getPath());

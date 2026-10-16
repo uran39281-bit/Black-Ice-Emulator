@@ -33,7 +33,7 @@ public class VideoEditorTest {
     private EditProject project(int transition) throws Exception {
         EditProject p=new EditProject();p.name="BC-1 acceptance";
         for(String name:new String[]{"red.mp4","blue.mp4"}){
-            EditProject.Clip c=new EditProject.Clip();c.name=name;c.uri=fixture(name);c.sourceDurationMs=3000;c.inMs=300;c.outMs=2300;c.transition=transition;c.easing=0;p.clips.add(c);
+            EditProject.Clip c=new MediaImporter(context).importClip(Uri.parse(fixture(name)),false);c.name=name;assertTrue(c.sourceDurationMs>=2990);c.inMs=300;c.outMs=2300;c.transition=transition;c.easing=0;p.clips.add(c);
         }
         return p;
     }
