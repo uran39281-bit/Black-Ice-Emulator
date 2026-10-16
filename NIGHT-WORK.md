@@ -1,16 +1,25 @@
 # BC-1 overnight development checkpoint
 
-## Active candidate: v1.0.4 export diagnostics
+## Latest verified development build: v1.0.4
 
-Candidate source `ae912eec2ca3a9d4a63212ae8646646bd30c24c5`; Actions `38888011311`. Build passed36 unit tests, lint0errors30warnings. GPU job116930396936 pending. APK12039928235/build12040312524. Signed local candidate `/workspace/scratch/9d8e062dc089/deliverables/BC-1-v1.0.4.apk`, SHA256 `7e80ed1718bf84c2bf68749681c11a13c54ba9d5dbe558467316dfea1e732ffe`, retained certificate verified, code16/name1.0.4. Binary staged only in APK repo as blob `979cc875c3b5a3e73416928c84d9f0df7d28f5db`; NOT published or Library-saved. Require20 Android tests, FOUR MP4 validations and screenshots before publishing.
+Continue `bc-1-v1.0.4-diagnostics`; preserve all older branches. Tested source `ae912eec2ca3a9d4a63212ae8646646bd30c24c5`, Actions `38888011311`: build and GPU jobs both passed.36 unit tests (0 failures/0 skipped),20 Android tests, lint0errors30warnings. FOUR independent ffmpeg decode/ffprobe gates passed: three sequential H.2641920×1080/AAC exports and one valid export after a deliberately missing-media failure. Expected missing-file error is logged; failure cleanup, service shutdown, retained redacted report and successful recovery all passed. Final diagnostic-dialog, paused-first-frame, phone9:16, wide16:9 and compact-wide screenshots reviewed against the V1 direction.
 
-Continue `bc-1-v1.0.4-diagnostics`. Adds Setup → Export diagnostics → Copy report with a bounded, redacted failure summary (stage, Media3 code, exception class chain; no exception messages/media paths). Last failure persists through later successes. Preparation, encoding and save failures are recorded; cancellations do not replace diagnostics. No renderer/encoder-policy change or automatic retry. New tests cover cause-chain redaction/cycles, missing-media failure cleanup followed by valid export, and actual UI clipboard copying. Three sequential exports plus recovery output must independently decode. Candidate code16/name1.0.4; do not publish until both CI jobs and screenshots pass. Local36 unit tests/Java compile and shell/diff checks pass; Android pending.
+New: Setup → Export diagnostics → Copy report. Copy is user-triggered; no automatic sending. Bounded report contains stage, Media3 code and cause class names, excluding media paths/names and exception messages. Last failure stays available after successful exports. Full exception chains are debug-only logs. Layout, GLES graph, transition policy, portable project schema and no-Page-Curl rule are unchanged.
+
+APK: https://raw.githubusercontent.com/uran39281-bit/bc-1/main/v1.0.4/BC-1-v1.0.4.apk
+QA: https://github.com/uran39281-bit/bc-1/blob/main/v1.0.4/QA.md
+SHA256: `7e80ed1718bf84c2bf68749681c11a13c54ba9d5dbe558467316dfea1e732ffe`.
+Package `com.blackice.bc1.preview`, versionName1.0.4/code16; retained certificate SHA256 `3c578586198b9ebadd9496d38e25851ec0e90d918684dc4994e03d1d7f29a29d` verified.
+APK repo commit `a149cde3a9957f1b54c32f8861054e783c1b603e`; raw download compared byte-for-byte. Local `/workspace/scratch/9d8e062dc089/deliverables/BC-1-v1.0.4.apk`; saved identity `libfile_b86329d0f7588191a7ff933406ce87b1`.
+Artifacts: APK12039928235, build12040312524, GPU12040997551. Local QA `/workspace/scratch/9d8e062dc089/qa/v104-final/`.
+
+IMPORTANT: v1.0.3 attempt1's intermittent muxer error was not reproduced by the unchanged rerun, three-export investigation or v1.0.4 qualification. Its initiating cause remains unknown, not claimed fixed. This remains a development-signed debug build, NOT production-stable certification. Physical Snapdragon8Gen3/SamsungDeX validation, thermal/battery/FPS measurements and RTX backend remain outstanding. Do not hide those limits in delivery.
 
 ## Completed investigation evidence
 
 `bc-1-export-reliability` source664e2f2, Actions38881066895 succeeded:18 Android tests and all THREE independent H.2641920×1080/AAC/duration checks passed, build succeeded. Artifacts GPU12037617816/build12037586895. This did not reproduce or establish the cause of the earlier intermittent muxer failure. Preserve that caveat. Investigation artifact remains DO-NOT-PUBLISH (old manifest), and all older APKs remain intact.
 
-## Latest published work: v1.0.3 thumbnail reliability
+## Preserved v1.0.3 thumbnail reliability
 
 Continue `bc-1-v1.0.3-thumbnails` unless a newer active follow-up is recorded above. Tested source `261c82dea4bc2628953c62d2a0b262f37945764b`, Actions `38874891062` attempt2: 33 unit +18 Android tests, lint0errors30warnings; independent MP4 decode/format gate passed. Final paused-first-frame, phone9:16, wide16:9, compact-wide and thumbnail-stress screenshots reviewed. Baseline run38874632718 reproduced the stale thumbnail; current-view observer fix passes in both candidate attempts.
 
@@ -65,7 +74,7 @@ v1.0.1 adds monoline icons, nine functional editing shortcuts, preview scrubber,
 
 User authorized ongoing improvements until 2026-10-16 04:30 America/Phoenix (11:30 UTC); suppress notifications until then. Deliver the latest VERIFIED direct GitHub APK link at that time, with concise test results and physical-device limits. ChatGPT file links previously failed with a cross-site URL error.
 
-Next: investigate the intermittent export failure with full debug causes and repeated service exports. Preserve v1.0.3 as the latest published development download, with its caveat; only publish changed application bytes under a NEW versionCode/path. Remaining V1 differences are the dedicated project-flow screen and category-specific inspector. Read fresh branch heads before guarded ref updates and keep the bc-1-v1.0 pointer current.
+Delivery: use the verified v1.0.4 direct APK link above, concise test totals and physical-device limitation. The04:30 delivery task is already enabled; do not create duplicates. Preserve this tested build rather than making a version-only change. Further work should start a new branch/versionCode>16: physical Snapdragon/DeX QA, capture actual recurring export failure reports, dedicated V1 project-flow screen and category-specific inspector. Read fresh branch heads before guarded updates; keep bc-1-v1.0's pointer current.
 
 ## Architecture and limits
 
@@ -75,7 +84,7 @@ Image/multilayer timelines use PreviewProxy: cancellable cached H.264/AAC render
 
 ## Verification and build workflow
 
-Use `.github/workflows/bc-1-android.yml` and `.github/scripts/bc1-device-checks.sh`: build/lint/33 unit tests, 18 Android tests in v1.0.3, screenshots, independent ffmpeg decode + ffprobe H.264 1920×1080/AAC/duration check. Build and GPU jobs both must pass. Review actual paused first-frame, phone, wide and compact-wide screenshots, not just test totals.
+Use `.github/workflows/bc-1-android.yml` and `.github/scripts/bc1-device-checks.sh`: build/lint/36 unit tests,20 Android tests in v1.0.4, screenshots, independent ffmpeg decode + ffprobe H.264 1920×1080/AAC/duration check. Build and GPU jobs both must pass. Review actual paused first-frame, phone, wide and compact-wide screenshots, not just test totals.
 
 Local SDK/Gradle distributions unavailable. Do not retry earlier auto-review-denied Gradle download; use GitHub CI. Cached Java dependencies can compile UI/model code but do not replace Android tests.
 
