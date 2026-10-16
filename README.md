@@ -1,3 +1,13 @@
+# BC-1 — Black Ice Custom Engine
+
+This development branch contains the BC-1 Android editor under [BC-1/](BC-1/README.md). Current work: v1.0 release candidate, continuing the tested v0.5 Motion & Layers engine. See [the development checkpoint](NIGHT-WORK.md) for build and QA status.
+
+**APK downloads:** [uran39281-bit/bc-1](https://github.com/uran39281-bit/bc-1). Earlier source branches and APKs remain preserved.
+
+The original emulator integration documentation follows unchanged for its separate historical component.
+
+---
+
 # Black Ice Emulator 1.0 — integration source checkpoint
 
 Status: source integration prepared; NOT a built or device-tested standalone release.
