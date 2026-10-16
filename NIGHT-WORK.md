@@ -1,3 +1,13 @@
+# Active follow-up: v1.0.1 V1 interface polish
+
+The latest development branch is now `bc-1-v1.0.1-ui`; v1.0 remains published and preserved. Read this branch for further work. This follow-up recovered the actual user-selected V1 reference images from saved files: `1000009084.png` (phone, 864×1536) and `1000009085.png` (desktop, 1536×864). They are now versioned under `BC-1/design/v1/`, with design notes. Earlier references below saying the images were unavailable describe the earlier v1.0 qualification, not current availability.
+
+Candidate v1.0.1 is versionCode 13, not yet published. It adds V1 monoline navigation/tool icons, nine editing shortcuts, a seekable preview scrubber, fixed timeline track labels, a taller desktop/phone timeline where space permits, desktop Undo/Redo/Save controls and darker panels. Compact-wide mode preserves its preview space. Keyboard shortcuts and the old controls remain accessible. The 30 unit tests pass locally; full Android build, UI screenshots, 17 instrumentation tests and independent MP4 decode must pass before publication. Check that new buttons fit and work and the compact wide preview remains usable. No additional effects or project schema changes.
+
+Do not overwrite v1.0 APK. If verified, publish `v1.0.1/BC-1-v1.0.1.apk` with new checksum and QA in the separate APK repository, then update this checkpoint and the pointer on bc-1-v1.0. Retained signing certificate must match v1.0. The user's 04:30 report should lead with the latest verified APK.
+
+---
+
 # BC-1 overnight development checkpoint
 
 Target report: 2026-10-16 04:30 America/Phoenix (11:30 UTC). User authorized continued development, testing and V1 interface improvements. Keep notifications quiet until delivery unless the user asks for status.

@@ -49,7 +49,7 @@ public class EditorWorkspaceTest {
             shell("wm size 1080x1920");shell("wm density 320");
             try(ActivityScenario<EditorActivity> scenario=ActivityScenario.launch(EditorActivity.class)){
                 Thread.sleep(3500);inst.waitForIdleSync();
-                scenario.onActivity(a->{View root=a.getWindow().getDecorView();text(root,"Lock").performClick();a.onKeyDown(KeyEvent.KEYCODE_D,new KeyEvent(0,0,KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_D,0,KeyEvent.META_CTRL_ON));assertNotNull("Locked edits explain how to unlock",text(root,"UI locked • tap Unlock to edit"));text(root,"Unlock").performClick();});
+                scenario.onActivity(a->{View root=a.getWindow().getDecorView();assertNotNull("V1 shortcut toolbar is available",text(root,"Split"));text(root,"Lock").performClick();text(root,"Split").performClick();assertNotNull("UI Lock also guards toolbar edits",text(root,"UI locked • tap Unlock to edit"));a.onKeyDown(KeyEvent.KEYCODE_D,new KeyEvent(0,0,KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_D,0,KeyEvent.META_CTRL_ON));assertNotNull("Locked edits explain how to unlock",text(root,"UI locked • tap Unlock to edit"));text(root,"Unlock").performClick();});
                 assertVisiblePreview(scenario);
                 scenario.onActivity(a->assertNotNull("First frame stays paused until Play",text(a.getWindow().getDecorView(),"▶  Play")));
                 capture("v10-paused-first-frame");
