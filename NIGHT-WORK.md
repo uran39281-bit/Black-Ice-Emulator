@@ -1,3 +1,9 @@
+# Active development: bc-1-v1.0.2-media
+
+Read NIGHT-WORK.md on `bc-1-v1.0.2-media` for the newest work. Candidate source `5e551384278f03270258ff7149c4f36a3fe0d1ce`, Actions run `38871745189`. Adds a V1 two-column desktop media browser, real type filters/search, recreation state and synchronized selection. Local compilation and 33 unit tests passed before the small selection-highlight follow-up. Full Android checks and screenshot review are pending; do not publish the candidate until verified. v1.0.1 below remains the latest verified APK.
+
+---
+
 # Latest verified development: bc-1-v1.0.1-ui
 
 Read NIGHT-WORK.md on `bc-1-v1.0.1-ui` before continuing. The latest checkpoint is `5441aaf23a5932b90d6c8739572d071f834af5c7`; tested code `27e09676cd88f875353dd5e86409dafd2d6f4d1c`, Actions `38869704876`: 30 unit +17 Android tests pass, lint0errors28warnings, independent MP4 decode passes. All final phone, wide, compact-wide and initial paused-preview screenshots reviewed.
