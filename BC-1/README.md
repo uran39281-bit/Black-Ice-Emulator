@@ -1,3 +1,11 @@
+# BC-1 v0.4 Preview — Video Timeline & Export
+
+The current development branch is `bc-1-v0.4-timeline`, continued from v0.3. See [the v0.4 architecture and build guide](V0.4-ARCHITECTURE.md) for the editor, media pipeline, saved projects, export behavior and current limits.
+
+The v0.3 effects lab is preserved under **Setup → Open v0.3 effects lab**. Earlier release documentation follows for history.
+
+---
+
 # BC-1 v0.3.0 — Dual Workspace / GPU Effects
 
 Continues v0.2 at `ad4ac82` on `bc-1-v0.3-effects`. The previous development branch and emulator overlay remain unchanged.

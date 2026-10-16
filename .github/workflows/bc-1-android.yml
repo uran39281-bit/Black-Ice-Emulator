@@ -1,7 +1,7 @@
 name: BC-1 Android build and GPU checks
 on:
   push:
-    branches: [bc-1-v0.2-ui, bc-1-v0.3-effects]
+    branches: [bc-1-v0.2-ui, bc-1-v0.3-effects, bc-1-v0.4-timeline]
     paths: ['BC-1/**', '.github/workflows/bc-1-android.yml']
   workflow_dispatch:
 permissions:
@@ -17,17 +17,19 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
-      - name: Install Android SDK 35
+          gradle-version: '8.11.1'
+      - name: Install Android SDK 36
         run: |
           SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)
-          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
+          "$SDKMANAGER" --install "platforms;android-36" "build-tools;35.0.0"
+      - name: Generate deterministic video and audio fixtures
+        run: bash .github/scripts/bc1-media-fixtures.sh
       - name: Unit tests, lint, APK and GPU test APK
         working-directory: BC-1
         run: gradle --no-daemon -Pbc1SideBySide testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
       - uses: actions/upload-artifact@v4
         with:
-          name: BC-1-v0.3-preview-apk
+          name: BC-1-v0.4-preview-apk
           path: BC-1/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
       - uses: actions/upload-artifact@v4
@@ -46,7 +48,7 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.11.1'
       - name: Enable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -59,8 +61,7 @@ jobs:
           target: google_apis
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: >-
-            cd BC-1 && (gradle --no-daemon -Pbc1SideBySide connectedDebugAndroidTest; result=$?; mkdir -p app/build/reports/androidTests/screenshots; adb pull /sdcard/Download/bc1-qa/. app/build/reports/androidTests/screenshots || result=1; exit "$result")
+          script: bash .github/scripts/bc1-device-checks.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
