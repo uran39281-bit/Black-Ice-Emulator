@@ -21,13 +21,15 @@ Prior context confirms these requirements, but the original full UI reference im
 
 ## Candidate changes and gates
 
-Current candidate version: 1.0.0-rc1, versionCode 10, package `com.blackice.bc1.preview` when built with `-Pbc1SideBySide`.
+Current candidate version: 1.0.0-rc2, versionCode 11, package `com.blackice.bc1.preview` when built with `-Pbc1SideBySide`.
 
 Adds UI Lock (editing/layout guard, still permits playback/scrub/export), 8 MiB background thumbnail cache, thumbnail clip strips, dedicated media browser for windows >=1100dp, cyan system controls/dialogs, correct left-docked divider resizing, audio-only source metadata/placement validation and clip-count guards. Source-time keyframes, easing curves, chroma controls, independent audio fades/waveforms, bundles, all v0.5 effects remain.
 
-Candidate source commit: `7ce00cf10d12117a6f8bba4c89a85f731bfc16da`. Actions run: `38863834137` (check current status).
+RC1 source `7ce00cf10d12117a6f8bba4c89a85f731bfc16da`, Actions run `38863834137`, passed 30 unit and 16 instrumented tests, lint 0 errors/28 warnings and ffmpeg export decode. However, screenshot review FOUND A RELEASE BLOCKER: initial paused preview was black and warmup advanced the playhead. RC1 is not published or qualified. The tests previously checked actual pixels only after playback.
 
-Local Java compilation and 30 unit tests pass. Full Android build, lint and instrumented tests for this candidate still must run. The workspace test checks real image preview pixels after playback and takes a paused-first-frame screenshot; inspect it. Verify UI Lock prevents Ctrl+D. Inspect portrait, large wide and compact wide screenshots. Check export decoding with ffprobe/ffmpeg. Fix concrete failures before promotion.
+RC2 replaces the warmup workaround. Complex/image compositions prepare a seekable H.264/AAC preview using the SAME GLES export graph at the selected preview resolution; ExoPlayer displays it paused at the original playhead. Cache keys ignore playhead changes; edits invalidate the cache; cancellation rejects stale callbacks and removes partial files. Single-video projects retain direct CompositionPlayer playback. The UI shows preparation progress and supports tap-to-cancel. This is a reliability fallback for Media3 1.11.1's known multi-input paused/seeking limitations, NOT an instant real-time multilayer preview promise. Long timelines need time/storage to prepare. Original sources/export remain unaffected.
+
+RC2 also culls offscreen timeline thumbnails/waveforms and reuses draw rectangles, protects player callbacks by identity, and clamps persisted/displayed position to project duration. New Android tests verify paused first-frame pixels BEFORE playback, unchanged initial playhead, seeking, actual preview pixels after resize/recreation, and proxy cancellation/cache reuse/edit invalidation. Local compilation and 30 unit tests pass. RC2 full build/lint/17 Android tests must run; record the source commit and workflow below after push.
 
 Existing v0.5 issues fixed: custom compositor settings rejected by single-video graphs; GainProcessor unity plateau boundary caused fades to fail. All v0.5 Android tests subsequently passed. Lint baseline: zero errors, 25 warnings.
 

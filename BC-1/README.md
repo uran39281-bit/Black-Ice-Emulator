@@ -1,3 +1,9 @@
+## v1.0 RC2 preview reliability
+
+Image and multilayer timelines now prepare a cached preview with the same GLES effects graph used for export. Preparation shows progress and can be cancelled; once ready, playback starts paused without moving the playhead. Seeking and workspace resizing reuse the cache. An edit invalidates the cached preview. Single-video timelines retain direct playback. Complex previews take time to prepare, especially on long timelines; this is not a claim of instant real-time compositing. Source media and final 1080p export stay unchanged.
+
+RC1 passed automated tests but failed visual review (black initial preview). RC2 adds first-frame, paused-seek, resize, cancellation and cache tests. Do not promote until these gates pass.
+
 # BC-1 v1.0 release candidate
 
 Development continues on `bc-1-v1.0` from the tested v0.5 Motion & Layers engine. This candidate adds V1 UI Lock, real thumbnail timelines, a dedicated media browser in large DeX windows, consistent cyan controls, and safer audio-only lane placement. Release status and remaining checks are in [NIGHT-WORK.md](../NIGHT-WORK.md).

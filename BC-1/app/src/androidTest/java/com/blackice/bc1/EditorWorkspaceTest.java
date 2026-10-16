@@ -22,6 +22,21 @@ public class EditorWorkspaceTest {
     private String shell(String command)throws Exception{try(ParcelFileDescriptor fd=inst.getUiAutomation().executeShellCommand(command);InputStream in=new ParcelFileDescriptor.AutoCloseInputStream(fd)){return new String(in.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8);}}
     private String override(String value){for(String line:value.split("\n"))if(line.startsWith("Override"))return line.substring(line.indexOf(':')+1).trim();return "reset";}
     private void capture(String name)throws Exception{inst.waitForIdleSync();Thread.sleep(1000);Bitmap b=inst.getUiAutomation().takeScreenshot();assertNotNull(b);File dir=new File(inst.getTargetContext().getFilesDir(),"qa");dir.mkdirs();try(OutputStream out=new FileOutputStream(new File(dir,name+".png"))){b.compress(Bitmap.CompressFormat.PNG,100,out);}b.recycle();}
+    private void assertVisiblePreview(ActivityScenario<EditorActivity> scenario)throws Exception{
+        long deadline=SystemClock.elapsedRealtime()+90000;
+        while(SystemClock.elapsedRealtime()<deadline){
+                java.util.concurrent.atomic.AtomicReference<SurfaceView> preview=new java.util.concurrent.atomic.AtomicReference<>();
+                scenario.onActivity(a->preview.set(surface(a.getWindow().getDecorView())));
+                Bitmap pixels=Bitmap.createBitmap(preview.get().getWidth(),preview.get().getHeight(),Bitmap.Config.ARGB_8888);
+                java.util.concurrent.CountDownLatch copied=new java.util.concurrent.CountDownLatch(1);java.util.concurrent.atomic.AtomicInteger result=new java.util.concurrent.atomic.AtomicInteger(-1);
+                inst.runOnMainSync(()->{try{PixelCopy.request(preview.get(),pixels,status->{result.set(status);copied.countDown();},new Handler(Looper.getMainLooper()));}catch(IllegalArgumentException e){copied.countDown();}});
+                assertTrue(copied.await(10,java.util.concurrent.TimeUnit.SECONDS));
+                int color=pixels.getPixel(pixels.getWidth()/4,pixels.getHeight()/2);pixels.recycle();
+                if(result.get()==PixelCopy.SUCCESS&&android.graphics.Color.blue(color)>30)return;
+                Thread.sleep(250);
+        }
+        fail("Preview must render real image pixels without pressing Play");
+    }
     @Test public void editorAdaptsAndTabsKeepVideoSurface()throws Exception{
         assumeTrue(Build.HARDWARE.contains("ranchu")||Build.HARDWARE.contains("goldfish"));String size=override(shell("wm size")),density=override(shell("wm density"));
         EditProject p=new EditProject();p.name="Ice • First Cut";
@@ -35,20 +50,20 @@ public class EditorWorkspaceTest {
             try(ActivityScenario<EditorActivity> scenario=ActivityScenario.launch(EditorActivity.class)){
                 Thread.sleep(3500);inst.waitForIdleSync();
                 scenario.onActivity(a->{View root=a.getWindow().getDecorView();text(root,"Lock").performClick();a.onKeyDown(KeyEvent.KEYCODE_D,new KeyEvent(0,0,KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_D,0,KeyEvent.META_CTRL_ON));assertNotNull("Locked edits explain how to unlock",text(root,"UI locked • tap Unlock to edit"));text(root,"Unlock").performClick();});
+                assertVisiblePreview(scenario);
+                scenario.onActivity(a->assertNotNull("First frame stays paused until Play",text(a.getWindow().getDecorView(),"▶  Play")));
                 capture("v10-paused-first-frame");
+                scenario.onActivity(a->assertNotNull("Preparation must not advance the playhead",text(a.getWindow().getDecorView(),"00:00.00  /  00:03.75")));
+                scenario.onActivity(a->a.onKeyDown(KeyEvent.KEYCODE_DPAD_RIGHT,new KeyEvent(0,0,KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_DPAD_RIGHT,0,KeyEvent.META_SHIFT_ON)));
+                Thread.sleep(500);assertVisiblePreview(scenario);
+                scenario.onActivity(a->{assertNotNull("Paused seek updates the playhead",text(a.getWindow().getDecorView(),"00:01.00  /  00:03.75"));a.onKeyDown(KeyEvent.KEYCODE_DPAD_LEFT,new KeyEvent(0,0,KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_DPAD_LEFT,0,KeyEvent.META_SHIFT_ON));});
                 scenario.onActivity(a->a.onKeyDown(KeyEvent.KEYCODE_SPACE,new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_SPACE)));
                 Thread.sleep(1500);
                 scenario.onActivity(a->a.onKeyDown(KeyEvent.KEYCODE_SPACE,new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_SPACE)));
-                java.util.concurrent.atomic.AtomicReference<SurfaceView> preview=new java.util.concurrent.atomic.AtomicReference<>();
-                scenario.onActivity(a->preview.set(surface(a.getWindow().getDecorView())));
-                Bitmap pixels=Bitmap.createBitmap(preview.get().getWidth(),preview.get().getHeight(),Bitmap.Config.ARGB_8888);
-                java.util.concurrent.CountDownLatch copied=new java.util.concurrent.CountDownLatch(1);java.util.concurrent.atomic.AtomicInteger result=new java.util.concurrent.atomic.AtomicInteger(-1);
-                inst.runOnMainSync(()->PixelCopy.request(preview.get(),pixels,status->{result.set(status);copied.countDown();},new Handler(Looper.getMainLooper())));
-                assertTrue(copied.await(10,java.util.concurrent.TimeUnit.SECONDS));assertEquals("Preview has rendered a frame",PixelCopy.SUCCESS,result.get());
-                int color=pixels.getPixel(pixels.getWidth()/4,pixels.getHeight()/2);pixels.recycle();assertTrue("Image layers must render visibly in preview",android.graphics.Color.blue(color)>30);
+                assertVisiblePreview(scenario);
                 scenario.onActivity(a->{View root=a.getWindow().getDecorView();assertNotNull("Sample project must be loaded before visual checks",text(root,"Ice • First Cut  ▾"));SurfaceView video=surface(root);assertNotNull(video);assertTrue(video.getWidth()>0&&video.getHeight()>0);View parent=(View)video.getParent();text(root,"Effects").performClick();assertSame(parent,video.getParent());assertNotNull(text(root,"GPU EFFECTS"));});capture("v10-phone-9x16");
-                shell("wm size 1920x1080");shell("wm density 160");Thread.sleep(1800);inst.waitForIdleSync();scenario.onActivity(a->{assertTrue(surface(a.getWindow().getDecorView()).getWidth()>500);});capture("v10-wide-16x9");
-                inst.getTargetContext().getSharedPreferences(EditorActivity.PREFS,0).edit().putString("mode","WIDE").commit();shell("wm size 780x420");scenario.recreate();Thread.sleep(2500);inst.waitForIdleSync();scenario.onActivity(a->{assertNotNull("Wide preference must be restored",text(a.getWindow().getDecorView(),"WIDE"));SurfaceView video=surface(a.getWindow().getDecorView());assertTrue(video.getWidth()>150&&video.getHeight()>60);});capture("v10-compact-wide");
+                shell("wm size 1920x1080");shell("wm density 160");Thread.sleep(1800);inst.waitForIdleSync();scenario.onActivity(a->{assertTrue(surface(a.getWindow().getDecorView()).getWidth()>500);});assertVisiblePreview(scenario);capture("v10-wide-16x9");
+                inst.getTargetContext().getSharedPreferences(EditorActivity.PREFS,0).edit().putString("mode","WIDE").commit();shell("wm size 780x420");scenario.recreate();Thread.sleep(2500);inst.waitForIdleSync();scenario.onActivity(a->{assertNotNull("Wide preference must be restored",text(a.getWindow().getDecorView(),"WIDE"));SurfaceView video=surface(a.getWindow().getDecorView());assertTrue(video.getWidth()>150&&video.getHeight()>60);});assertVisiblePreview(scenario);capture("v10-compact-wide");
             }
         }finally{shell("wm size "+size);shell("wm density "+density);inst.getTargetContext().getSharedPreferences(EditorActivity.PREFS,0).edit().putString("mode","AUTO").putBoolean("ui-locked",false).commit();}
     }

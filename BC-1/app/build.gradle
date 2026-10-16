@@ -8,11 +8,11 @@ android {
         applicationId 'com.blackice.bc1'
         // Use a parallel preview install when the earlier signing key is unavailable.
         if (project.hasProperty('bc1SideBySide')) applicationIdSuffix '.preview'
-        manifestPlaceholders = [appLabel: project.hasProperty('bc1SideBySide') ? 'BC-1 v1.0 RC1' : 'BC-1 Dual Workspace']
+        manifestPlaceholders = [appLabel: project.hasProperty('bc1SideBySide') ? 'BC-1 v1.0 RC2' : 'BC-1 Dual Workspace']
         minSdk 26
         targetSdk 35
-        versionCode 10
-        versionName '1.0.0-rc1'
+        versionCode 11
+        versionName '1.0.0-rc2'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 

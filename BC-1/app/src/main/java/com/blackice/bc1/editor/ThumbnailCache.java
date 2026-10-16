@@ -29,7 +29,7 @@ public final class ThumbnailCache implements AutoCloseable {
     public Bitmap peek(EditProject.Clip c){return cache.get(key(c));}
     public Bitmap get(EditProject.Clip c,Runnable ready){
         String key=key(c);Bitmap current=cache.get(key);if(current!=null||closed||failed.contains(key))return current;
-        if(pending.containsKey(key)){if(pending.get(key).size()<8)pending.get(key).add(ready);return null;}
+        if(pending.containsKey(key)){if(pending.get(key).size()<8&&!pending.get(key).contains(ready))pending.get(key).add(ready);return null;}
         List<Runnable> listeners=new ArrayList<>();listeners.add(ready);pending.put(key,listeners);
         String uri=c.uri;long time=c.inMs;boolean image=c.image;
         worker.execute(()->{Bitmap result=null;try{result=decode(uri,time,image);}catch(Exception ignored){}final Bitmap decoded=result;

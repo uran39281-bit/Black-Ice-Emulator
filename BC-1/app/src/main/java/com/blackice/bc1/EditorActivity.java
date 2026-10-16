@@ -12,6 +12,7 @@ import android.widget.*;
 import androidx.media3.common.*;
 import androidx.media3.effect.MultipleInputVideoGraph;
 import androidx.media3.transformer.CompositionPlayer;
+import androidx.media3.exoplayer.ExoPlayer;
 import com.blackice.bc1.editor.*;
 import com.blackice.bc1.engine.EngineSettings;
 import java.io.*;
@@ -28,12 +29,13 @@ public final class EditorActivity extends Activity {
     private final ExecutorService io=Executors.newSingleThreadExecutor();
     private ProjectStore store;
     private EditProject project=new EditProject();
-    private CompositionPlayer player;
+    private Player player;
+    private PreviewProxy previewProxy;
     private SurfaceView surface;
     private FrameLayout monitor;
     private LinearLayout inspector,mediaBrowser;
     private ThumbnailCache thumbnails;
-    private boolean uiLocked,previewWarming;
+    private boolean uiLocked,previewPending,previewAutoplay;
     private TextView lockButton;
     private static final int AUDIO_LAYER=110,BACKUP=111,RESTORE=112;
     private final java.util.Map<String,float[]> waveforms=new java.util.HashMap<>();
@@ -52,7 +54,7 @@ public final class EditorActivity extends Activity {
     private final Runnable autosave=()->saveNow();
     private final Runnable pulse=new Runnable(){@Override public void run(){
         if(!active)return;
-        if(player!=null && player.isPlaying()) {project.playheadMs=player.getCurrentPosition();syncPosition();}
+        if(player!=null && player.isPlaying()) {project.playheadMs=Math.min(project.durationMs(),Math.max(0,player.getCurrentPosition()));syncPosition();}
         if(play!=null)play.setText(player!=null&&player.isPlaying()?"Ⅱ  Pause":"▶  Play");
         android.content.SharedPreferences export=getSharedPreferences(ExportService.PREFS,MODE_PRIVATE);
         boolean running=export.getBoolean("running",false);
@@ -65,7 +67,7 @@ public final class EditorActivity extends Activity {
     }};
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
-        thumbnails=new ThumbnailCache(this);uiLocked=getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean("ui-locked",false);
+        thumbnails=new ThumbnailCache(this);previewProxy=new PreviewProxy(this);uiLocked=getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean("ui-locked",false);
         store=new ProjectStore(this);inspectorWidth=getSharedPreferences(PREFS,MODE_PRIVATE).getInt("panel-width",300);
         android.content.SharedPreferences exportState=getSharedPreferences(ExportService.PREFS,MODE_PRIVATE);
         if(exportState.getBoolean("running",false)&&!ExportService.isRunning())exportState.edit().putBoolean("running",false)
@@ -91,25 +93,47 @@ public final class EditorActivity extends Activity {
     @Override public void onConfigurationChanged(Configuration config){super.onConfigurationChanged(config);buildWorkspace();}
     private boolean exporting(){return getSharedPreferences(ExportService.PREFS,MODE_PRIVATE).getBoolean("running",false)||exportLaunching;}
     private boolean editable(){if(uiLocked){tell("UI locked • tap Unlock to edit");return false;}if(loading||importing){tell("Wait for the current import to finish.");return false;}if(exporting()){tell("Wait for export to finish, or cancel it to continue editing.");return false;}return true;}
-    private void releasePreview(){previewWarming=false;if(player!=null){project.playheadMs=player.getCurrentPosition();player.release();player=null;}}
+    private void releasePreview(){
+        previewPending=false;previewAutoplay=false;if(previewProxy!=null)previewProxy.cancel();
+        if(player!=null){project.playheadMs=Math.min(project.durationMs(),Math.max(0,player.getCurrentPosition()));player.release();player=null;}
+    }
+    private void previewHint(String text){if(emptyPreview!=null){emptyPreview.setText(text);emptyPreview.setVisibility(View.VISIBLE);}}
+    private void attachPreview(Player prepared){
+        player=prepared;prepared.setVideoSurfaceView(surface);
+        prepared.addListener(new Player.Listener(){
+            @Override public void onRenderedFirstFrame(){if(player==prepared&&emptyPreview!=null)emptyPreview.setVisibility(View.GONE);}
+            @Override public void onPlayerError(PlaybackException error){if(player!=prepared)return;prepared.pause();tell("Preview error: "+error.getMessage());previewHint("Preview unavailable • tap to retry");}
+            @Override public void onPlaybackStateChanged(int state){if(state==Player.STATE_ENDED&&player==prepared){project.playheadMs=project.durationMs();syncPosition();}}
+        });
+    }
     private void preparePreview(boolean playWhenReady) {
         if(!active||loading||exporting())return;
         long position=project.playheadMs;releasePreview();project.playheadMs=position;
         if(project.clips.isEmpty()){syncPosition();return;}
         try {
             EditProject snapshot=ProjectStore.snapshot(project);
-            player=new CompositionPlayer.Builder(this).setVideoGraphFactory(new MultipleInputVideoGraph.Factory(CompositionFactory.frameProcessor()))
-                    .setAudioAttributes(new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),true).build();
-            previewWarming=!playWhenReady;
-            if(previewWarming)player.setVolume(0);
-            player.addListener(new Player.Listener(){
-                @Override public void onRenderedFirstFrame(){if(previewWarming&&player!=null){previewWarming=false;player.pause();player.setVolume(1);}}
-                @Override public void onPlayerError(PlaybackException error){tell("Preview error: "+error.getMessage()+". Check the selected media or try a lower preview quality.");}
-                @Override public void onPlaybackStateChanged(int state){if(state==Player.STATE_ENDED && player!=null){project.playheadMs=project.durationMs();syncPosition();}}
-            });
-            player.setVideoSurfaceView(surface);player.setComposition(CompositionFactory.build(this,snapshot,false),Math.min(position,Math.max(0,project.durationMs()-1)));
-            player.prepare();player.setPlayWhenReady(true);
-        } catch(Exception e){tell("Cannot prepare preview: "+e.getMessage());}
+            previewHint("Preparing preview…");
+            if(PreviewProxy.required(snapshot)){
+                previewPending=true;previewAutoplay=playWhenReady;
+                previewProxy.prepare(snapshot,new PreviewProxy.Listener(){
+                    @Override public void onProgress(int percent){if(!active||!previewPending)return;previewHint((percent<0?"Preparing preview…":"Preparing preview • "+percent+"%")+"\nTap to cancel");}
+                    @Override public void onReady(File file){
+                        if(!active||!previewPending)return;previewPending=false;
+                        ExoPlayer prepared=new ExoPlayer.Builder(EditorActivity.this).build();attachPreview(prepared);
+                        prepared.setAudioAttributes(new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),true);
+                        prepared.setMediaItem(MediaItem.fromUri(Uri.fromFile(file)),Math.min(project.playheadMs,Math.max(0,project.durationMs()-1)));
+                        prepared.prepare();prepared.setPlayWhenReady(previewAutoplay);previewAutoplay=false;
+                    }
+                    @Override public void onError(String error){previewPending=false;previewAutoplay=false;tell("Preview preparation failed: "+error);previewHint("Preview unavailable • tap to retry");}
+                });
+            }else{
+                CompositionPlayer prepared=new CompositionPlayer.Builder(this)
+                        .setVideoGraphFactory(new MultipleInputVideoGraph.Factory(CompositionFactory.frameProcessor()))
+                        .setAudioAttributes(new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),true).build();
+                attachPreview(prepared);prepared.setComposition(CompositionFactory.build(this,snapshot,false),Math.min(position,Math.max(0,project.durationMs()-1)));
+                prepared.prepare();prepared.setPlayWhenReady(playWhenReady);
+            }
+        }catch(Exception e){releasePreview();tell("Cannot prepare preview: "+e.getMessage());previewHint("Preview unavailable • tap to retry");}
     }
     private void remember(){try {undo.addLast(ProjectStore.encode(project));while(undo.size()>30)undo.removeFirst();redo.clear();}catch(Exception e){tell(e.getMessage());}}
     private void changed(String text) {
@@ -117,7 +141,7 @@ public final class EditorActivity extends Activity {
     }
     private void saveNow() {
         main.removeCallbacks(autosave);if(loading)return;
-        if(player!=null)project.playheadMs=player.getCurrentPosition();
+        if(player!=null)project.playheadMs=Math.min(project.durationMs(),Math.max(0,player.getCurrentPosition()));
         EditProject snapshot=ProjectStore.snapshot(project);
         io.execute(()->{try{store.save(snapshot);main.post(()->getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString("last-project",snapshot.id).apply());}
             catch(Exception e){main.post(()->tell("Save failed: "+e.getMessage()));}});
@@ -136,7 +160,7 @@ public final class EditorActivity extends Activity {
     }
     private void syncPosition(){if(time!=null)time.setText(clock(project.playheadMs)+"  /  "+clock(project.durationMs()));if(timeline!=null)timeline.invalidate();}
     private void seek(long ms){project.playheadMs=Math.max(0,Math.min(ms,project.durationMs()));if(player!=null){player.pause();player.seekTo(Math.min(project.playheadMs,Math.max(0,project.durationMs()-1)));}syncPosition();}
-    private void togglePlay(){if(previewWarming&&player!=null){previewWarming=false;player.setVolume(1);player.play();return;}if(player==null){tell("Import a video or image first.");return;}if(player.isPlaying())player.pause();else{if(player.getPlaybackState()==Player.STATE_ENDED||project.playheadMs>=project.durationMs())player.seekTo(0);player.play();}}
+    private void togglePlay(){if(previewPending){previewAutoplay=!previewAutoplay;tell(previewAutoplay?"Playback will start when the preview is ready.":"Preview will stay paused when ready.");return;}if(player==null){if(project.clips.isEmpty())tell("Import a video or image first.");else preparePreview(true);return;}if(player.getPlayWhenReady())player.pause();else{if(player.getPlaybackState()==Player.STATE_ENDED||project.playheadMs>=project.durationMs())player.seekTo(0);player.play();}}
 
     private void buildWorkspace() {
         Configuration c=getResources().getConfiguration();android.view.Display display=getWindowManager().getDefaultDisplay();
@@ -179,7 +203,7 @@ public final class EditorActivity extends Activity {
         }
         status=label(message,10,MUTED,false);status.setSingleLine(true);status.setPadding(dp(10),0,dp(10),dp(3));status.setOnClickListener(v->new AlertDialog.Builder(this).setMessage(status.getText()).setPositiveButton("OK",null).show());root.addView(status,new LinearLayout.LayoutParams(-1,dp(24)));
         root.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets.consumeSystemWindowInsets();});
-        setContentView(root);root.requestApplyInsets();if(player!=null)player.setVideoSurfaceView(surface);renderInspector();syncPosition();
+        setContentView(root);root.requestApplyInsets();if(player!=null)player.setVideoSurfaceView(surface);renderInspector();syncPosition();if(previewPending)previewHint("Preparing preview…\nTap to cancel");
     }
     private View buildMonitor() {
         if(surface==null){surface=new SurfaceView(this);surface.setContentDescription("Video project preview");}
@@ -191,7 +215,7 @@ public final class EditorActivity extends Activity {
             if(params.width!=Math.max(1,sw)||params.height!=Math.max(1,sh)){params.width=Math.max(1,sw);params.height=Math.max(1,sh);surface.setLayoutParams(params);}super.onMeasure(wSpec,hSpec);
         }};
         monitor.setBackgroundColor(Color.BLACK);monitor.addView(surface,new FrameLayout.LayoutParams(-1,-1,Gravity.CENTER));
-        emptyPreview=label("START YOUR FIRST CUT\n\n+ Import video or images",14,CYAN,true);emptyPreview.setGravity(Gravity.CENTER);emptyPreview.setContentDescription("Import video or images");emptyPreview.setFocusable(true);emptyPreview.setOnClickListener(v->pick(IMPORT,"*/*"));emptyPreview.setVisibility(project.clips.isEmpty()?View.VISIBLE:View.GONE);monitor.addView(emptyPreview,new FrameLayout.LayoutParams(-1,-1));
+        emptyPreview=label("START YOUR FIRST CUT\n\n+ Import video or images",14,CYAN,true);emptyPreview.setGravity(Gravity.CENTER);emptyPreview.setContentDescription("Import video or images");emptyPreview.setFocusable(true);emptyPreview.setBackgroundColor(Color.BLACK);emptyPreview.setOnClickListener(v->{if(project.clips.isEmpty())pick(IMPORT,"*/*");else if(previewPending){releasePreview();previewHint("Preview cancelled • tap to prepare");}else preparePreview(false);});emptyPreview.setVisibility(project.clips.isEmpty()?View.VISIBLE:View.GONE);monitor.addView(emptyPreview,new FrameLayout.LayoutParams(-1,-1));
         return monitor;
     }
     private View transport() {
@@ -384,22 +408,25 @@ public final class EditorActivity extends Activity {
 
     private final class TimelineCanvas extends View {
         private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Rect visibleBounds=new Rect();
+        private final RectF thumbnailBounds=new RectF();
+        private final Runnable thumbnailReady=()->{if(!isDestroyed())invalidate();};
         private float downX;private boolean dragging;
         TimelineCanvas(){super(EditorActivity.this);setContentDescription("Timeline: tap a clip to select and seek; drag across the ruler to scrub. Horizontal scroll and plus/minus zoom.");setFocusable(true);}
         private float timelineScale(){return Math.min(dp(pixelsPerSecond),dp(30000)/Math.max(1f,project.durationMs()/1000f));}
         private float x(long ms){return dp(12)+ms/1000f*timelineScale();}
         @Override protected void onMeasure(int w,int h){setMeasuredDimension(View.resolveSize(Math.max(dp(280),Math.min(dp(30000),(int)x(project.durationMs())+dp(30))),w),View.MeasureSpec.getSize(h));}
         @Override protected void onDraw(Canvas canvas){
-            canvas.drawColor(PANEL);int height=getHeight();float mainY=dp(35),clipH=dp(48);java.util.List<Integer> laneList=lanes();
+            canvas.getClipBounds(visibleBounds);canvas.drawColor(PANEL);int height=getHeight();float mainY=dp(35),clipH=dp(48);java.util.List<Integer> laneList=lanes();
             paint.setTextSize(dp(10));paint.setTypeface(Typeface.DEFAULT);paint.setColor(MUTED);
             long interval=1000;while(interval/1000f*timelineScale()<dp(55))interval*=2;
             for(long ms=0;ms<=project.durationMs();ms+=interval){float xx=x(ms);canvas.drawText(seconds(ms)+"s",xx,dp(16),paint);canvas.drawLine(xx,dp(21),xx,height,paint);}
             java.util.List<EditProject.Placement> placements=project.placements();
-            for(EditProject.Placement p:placements){mainY=dp(35+laneList.indexOf(p.clip.track)*52);float left=x(p.startMs),right=x(p.endMs);paint.setColor(p.index==selected?0xFF226D99:0xFF204057);canvas.drawRoundRect(left,mainY,right,mainY+clipH,dp(5),dp(5),paint);
-                if(p.clip.track<4&&right>canvas.getClipBounds().left&&left<canvas.getClipBounds().right){Bitmap thumb=thumbnails.get(p.clip,()->{if(!isDestroyed()&&timeline!=null)timeline.invalidate();});if(thumb!=null){canvas.save();canvas.clipRect(left+dp(1),mainY+dp(1),right-dp(1),mainY+clipH-dp(1));float tw=clipH*thumb.getWidth()/thumb.getHeight();for(float tx=left;tx<right;tx+=tw)canvas.drawBitmap(thumb,null,new RectF(tx,mainY,tx+tw,mainY+clipH),paint);paint.setColor(0xAA08131F);canvas.drawRect(left,mainY+clipH-dp(21),right,mainY+clipH,paint);canvas.restore();}}
+            for(EditProject.Placement p:placements){mainY=dp(35+laneList.indexOf(p.clip.track)*52);float left=x(p.startMs),right=x(p.endMs);if(right<=visibleBounds.left||left>=visibleBounds.right||mainY+clipH<=visibleBounds.top||mainY>=visibleBounds.bottom)continue;paint.setColor(p.index==selected?0xFF226D99:0xFF204057);canvas.drawRoundRect(left,mainY,right,mainY+clipH,dp(5),dp(5),paint);
+                if(p.clip.track<4){Bitmap thumb=thumbnails.get(p.clip,thumbnailReady);if(thumb!=null){canvas.save();canvas.clipRect(left+dp(1),mainY+dp(1),right-dp(1),mainY+clipH-dp(1));float tw=clipH*thumb.getWidth()/thumb.getHeight();float first=left+Math.max(0,(float)Math.floor((visibleBounds.left-left)/tw))*tw;for(float tx=first;tx<Math.min(right,visibleBounds.right);tx+=tw){thumbnailBounds.set(tx,mainY,tx+tw,mainY+clipH);canvas.drawBitmap(thumb,null,thumbnailBounds,paint);}paint.setColor(0xAA08131F);canvas.drawRect(left,mainY+clipH-dp(21),right,mainY+clipH,paint);canvas.restore();}}
                 paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(p.index==selected?2:1));paint.setColor(p.index==selected?CYAN:0xFF3B677C);canvas.drawRoundRect(left,mainY,right,mainY+clipH,dp(5),dp(5),paint);paint.setStyle(Paint.Style.FILL);
                 canvas.save();canvas.clipRect(left+dp(4),mainY,right-dp(3),mainY+clipH);paint.setColor(TEXT);paint.setTextSize(dp(11));canvas.drawText((p.clip.track>=4?"A"+(p.clip.track-3):"V"+p.clip.track)+"  "+p.clip.name,left+dp(7),mainY+clipH-dp(6),paint);canvas.restore();
-                float[] peaks=waveforms.get(p.clip.uri);if(peaks!=null){paint.setColor(0xFF74D3C1);for(float xx=left;xx<right;xx+=dp(3)){long source=p.clip.inMs+(long)((xx-left)/(right-left)*p.clip.durationMs());int bin=(int)Math.min(511,source*512/Math.max(1,p.clip.sourceDurationMs));float amplitude=peaks[Math.max(0,bin)]*dp(10);canvas.drawLine(xx,mainY+clipH/2-amplitude,xx,mainY+clipH/2+amplitude,paint);}}
+                float[] peaks=waveforms.get(p.clip.uri);if(peaks!=null){paint.setColor(0xFF74D3C1);for(float xx=Math.max(left,visibleBounds.left);xx<Math.min(right,visibleBounds.right);xx+=dp(3)){long source=p.clip.inMs+(long)((xx-left)/(right-left)*p.clip.durationMs());int bin=(int)Math.min(511,source*512/Math.max(1,p.clip.sourceDurationMs));float amplitude=peaks[Math.max(0,bin)]*dp(10);canvas.drawLine(xx,mainY+clipH/2-amplitude,xx,mainY+clipH/2+amplitude,paint);}}
                 if(p.outgoingMs>0){paint.setColor(0x9940BFFF);canvas.drawRect(x(p.endMs-p.outgoingMs),mainY,right,mainY+clipH,paint);}
             }
             paint.setColor(MUTED);paint.setTextSize(dp(10));if(placements.isEmpty())canvas.drawText("IMPORT MEDIA TO BUILD YOUR TIMELINE",dp(12),mainY+dp(23),paint);
