@@ -18,7 +18,7 @@ public final class EditProject {
 
     public static final class Clip {
         public String id = UUID.randomUUID().toString(), uri, name;
-        public boolean image;
+        public boolean image, audioOnly;
         public int track; public long startMs,fadeInMs,fadeOutMs;
         public float x,y,scale=1,rotation,keyTolerance=.25f,keySoftness=.08f,keySpill=.5f;
         public int keyColor=0xFF00FF00; public boolean chroma;
@@ -29,7 +29,7 @@ public final class EditProject {
         public long transitionMs = 500;
         public long durationMs() { return outMs - inMs; }
         public Clip copy() {
-            Clip c = new Clip(); c.uri=uri; c.name=name; c.image=image;
+            Clip c = new Clip(); c.uri=uri; c.name=name; c.image=image;c.audioOnly=audioOnly;
             c.track=track;c.startMs=startMs;c.fadeInMs=fadeInMs;c.fadeOutMs=fadeOutMs;c.x=x;c.y=y;c.scale=scale;c.rotation=rotation;c.chroma=chroma;c.keyColor=keyColor;c.keyTolerance=keyTolerance;c.keySoftness=keySoftness;c.keySpill=keySpill;c.motion=motion.copy();
             c.sourceDurationMs=sourceDurationMs; c.inMs=inMs; c.outMs=outMs;
             c.effect=effect; c.transition=transition; c.easing=easing;
@@ -105,6 +105,7 @@ public final class EditProject {
         if(previewHeight!=360 && previewHeight!=540 && previewHeight!=1080) throw new IllegalArgumentException("Invalid preview resolution.");
         for(Clip c:clips) {
             c.motion.validate();
+            if(c.audioOnly&&c.track<4)throw new IllegalArgumentException("Audio-only media belongs on an audio lane.");
             if(c.track<0||c.track>7||c.startMs<0||c.fadeInMs<0||c.fadeOutMs<0||c.fadeInMs>c.durationMs()||c.fadeOutMs>c.durationMs()||!Motion.allowed(0,c.x)||!Motion.allowed(1,c.y)||!Motion.allowed(2,c.scale)||!Motion.allowed(3,c.rotation)||!unit(c.keyTolerance)||!unit(c.keySoftness)||c.keySoftness<.001f||!unit(c.keySpill)||(c.track>=4&&c.image))throw new IllegalArgumentException("Invalid track, transform or fade.");
             if(c.uri==null || c.name==null || c.inMs<0 || c.outMs>c.sourceDurationMs || c.durationMs()<MIN_CLIP_MS
                     || c.effect<0 || c.effect>11 || c.transition< -1 || c.transition>6 || c.easing<0 || c.easing>1

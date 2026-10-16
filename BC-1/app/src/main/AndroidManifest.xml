@@ -8,7 +8,7 @@
         android:allowBackup="false"
         android:label="${appLabel}"
         android:icon="@drawable/ic_black_ice"
-        android:theme="@android:style/Theme.Material.NoActionBar"
+        android:theme="@style/BlackIceTheme"
         android:resizeableActivity="true"
         android:usesCleartextTraffic="false">
         <activity android:name=".EditorActivity" android:exported="true" android:launchMode="singleTop"

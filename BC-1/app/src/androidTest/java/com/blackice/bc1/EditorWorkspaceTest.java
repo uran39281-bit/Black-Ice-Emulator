@@ -29,11 +29,13 @@ public class EditorWorkspaceTest {
         for(int i=0;i<2;i++){EditProject.Clip clip=new EditProject.Clip();clip.name=i==0?"ICE / OPENING":"ICE / DETAIL";clip.uri=android.net.Uri.fromFile(image).toString();clip.image=true;clip.sourceDurationMs=3000;clip.outMs=3000;clip.transition=0;p.clips.add(clip);}
         p.clips.get(1).track=1;p.clips.get(1).startMs=750;p.clips.get(1).scale=.6f;p.clips.get(1).x=.4f;p.clips.get(1).motion.put(3,new Motion.Key(0,0));p.clips.get(1).motion.put(3,new Motion.Key(3000,30));
         EditProject.Overlay title=new EditProject.Overlay();title.text="BLACK ICE";title.y=0;p.overlays.add(title);new ProjectStore(inst.getTargetContext()).save(p);
-        inst.getTargetContext().getSharedPreferences(EditorActivity.PREFS,0).edit().putString("last-project",p.id).putString("mode","AUTO").commit();
+        inst.getTargetContext().getSharedPreferences(EditorActivity.PREFS,0).edit().putString("last-project",p.id).putString("mode","AUTO").putBoolean("ui-locked",false).commit();
         try{
             shell("wm size 1080x1920");shell("wm density 320");
             try(ActivityScenario<EditorActivity> scenario=ActivityScenario.launch(EditorActivity.class)){
                 Thread.sleep(3500);inst.waitForIdleSync();
+                scenario.onActivity(a->{View root=a.getWindow().getDecorView();text(root,"Lock").performClick();a.onKeyDown(KeyEvent.KEYCODE_D,new KeyEvent(0,0,KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_D,0,KeyEvent.META_CTRL_ON));assertNotNull("Locked edits explain how to unlock",text(root,"UI locked • tap Unlock to edit"));text(root,"Unlock").performClick();});
+                capture("v10-paused-first-frame");
                 scenario.onActivity(a->a.onKeyDown(KeyEvent.KEYCODE_SPACE,new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_SPACE)));
                 Thread.sleep(1500);
                 scenario.onActivity(a->a.onKeyDown(KeyEvent.KEYCODE_SPACE,new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_SPACE)));
@@ -44,10 +46,10 @@ public class EditorWorkspaceTest {
                 inst.runOnMainSync(()->PixelCopy.request(preview.get(),pixels,status->{result.set(status);copied.countDown();},new Handler(Looper.getMainLooper())));
                 assertTrue(copied.await(10,java.util.concurrent.TimeUnit.SECONDS));assertEquals("Preview has rendered a frame",PixelCopy.SUCCESS,result.get());
                 int color=pixels.getPixel(pixels.getWidth()/4,pixels.getHeight()/2);pixels.recycle();assertTrue("Image layers must render visibly in preview",android.graphics.Color.blue(color)>30);
-                scenario.onActivity(a->{View root=a.getWindow().getDecorView();assertNotNull("Sample project must be loaded before visual checks",text(root,"Ice • First Cut  ▾"));SurfaceView video=surface(root);assertNotNull(video);assertTrue(video.getWidth()>0&&video.getHeight()>0);View parent=(View)video.getParent();text(root,"Effects").performClick();assertSame(parent,video.getParent());assertNotNull(text(root,"GPU EFFECTS"));});capture("v05-phone-9x16");
-                shell("wm size 1920x1080");shell("wm density 160");Thread.sleep(1800);inst.waitForIdleSync();scenario.onActivity(a->{assertTrue(surface(a.getWindow().getDecorView()).getWidth()>500);});capture("v05-wide-16x9");
-                inst.getTargetContext().getSharedPreferences(EditorActivity.PREFS,0).edit().putString("mode","WIDE").commit();shell("wm size 780x420");scenario.recreate();Thread.sleep(2500);inst.waitForIdleSync();scenario.onActivity(a->{assertNotNull("Wide preference must be restored",text(a.getWindow().getDecorView(),"WIDE"));SurfaceView video=surface(a.getWindow().getDecorView());assertTrue(video.getWidth()>150&&video.getHeight()>60);});capture("v05-compact-wide");
+                scenario.onActivity(a->{View root=a.getWindow().getDecorView();assertNotNull("Sample project must be loaded before visual checks",text(root,"Ice • First Cut  ▾"));SurfaceView video=surface(root);assertNotNull(video);assertTrue(video.getWidth()>0&&video.getHeight()>0);View parent=(View)video.getParent();text(root,"Effects").performClick();assertSame(parent,video.getParent());assertNotNull(text(root,"GPU EFFECTS"));});capture("v10-phone-9x16");
+                shell("wm size 1920x1080");shell("wm density 160");Thread.sleep(1800);inst.waitForIdleSync();scenario.onActivity(a->{assertTrue(surface(a.getWindow().getDecorView()).getWidth()>500);});capture("v10-wide-16x9");
+                inst.getTargetContext().getSharedPreferences(EditorActivity.PREFS,0).edit().putString("mode","WIDE").commit();shell("wm size 780x420");scenario.recreate();Thread.sleep(2500);inst.waitForIdleSync();scenario.onActivity(a->{assertNotNull("Wide preference must be restored",text(a.getWindow().getDecorView(),"WIDE"));SurfaceView video=surface(a.getWindow().getDecorView());assertTrue(video.getWidth()>150&&video.getHeight()>60);});capture("v10-compact-wide");
             }
-        }finally{shell("wm size "+size);shell("wm density "+density);inst.getTargetContext().getSharedPreferences(EditorActivity.PREFS,0).edit().putString("mode","AUTO").commit();}
+        }finally{shell("wm size "+size);shell("wm density "+density);inst.getTargetContext().getSharedPreferences(EditorActivity.PREFS,0).edit().putString("mode","AUTO").putBoolean("ui-locked",false).commit();}
     }
 }

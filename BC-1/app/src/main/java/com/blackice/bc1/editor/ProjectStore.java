@@ -40,7 +40,7 @@ public final class ProjectStore {
                 .put("portrait",p.portrait).put("previewHeight",p.previewHeight).put("playheadMs",p.playheadMs);
         JSONArray clips=new JSONArray();
         for(EditProject.Clip c:p.clips) clips.put(new JSONObject().put("id",c.id).put("uri",c.uri).put("name",c.name)
-                .put("image",c.image).put("sourceDurationMs",c.sourceDurationMs).put("inMs",c.inMs).put("outMs",c.outMs)
+                .put("audioOnly",c.audioOnly).put("image",c.image).put("sourceDurationMs",c.sourceDurationMs).put("inMs",c.inMs).put("outMs",c.outMs)
                 .put("effect",c.effect).put("intensity",c.intensity).put("opacity",c.opacity).put("volume",c.volume)
                 .put("track",c.track).put("startMs",c.startMs).put("fadeInMs",c.fadeInMs).put("fadeOutMs",c.fadeOutMs)
                 .put("x",c.x).put("y",c.y).put("scale",c.scale).put("rotation",c.rotation).put("motion",motion(c.motion))
@@ -66,7 +66,7 @@ public final class ProjectStore {
             c.track=v.optInt("track",0);c.startMs=v.optLong("startMs",0);c.fadeInMs=v.optLong("fadeInMs",0);c.fadeOutMs=v.optLong("fadeOutMs",0);
             c.x=(float)v.optDouble("x",0);c.y=(float)v.optDouble("y",0);c.scale=(float)v.optDouble("scale",1);c.rotation=(float)v.optDouble("rotation",0);c.motion=motion(v.optJSONArray("motion"));
             c.chroma=v.optBoolean("chroma",false);c.keyColor=v.optInt("keyColor",0xFF00FF00);c.keyTolerance=(float)v.optDouble("keyTolerance",.25);c.keySoftness=(float)v.optDouble("keySoftness",.08);c.keySpill=(float)v.optDouble("keySpill",.5);
-            c.id=v.getString("id"); c.uri=v.getString("uri"); c.name=v.getString("name"); c.image=v.getBoolean("image");
+            c.id=v.getString("id"); c.uri=v.getString("uri"); c.name=v.getString("name"); c.image=v.getBoolean("image");c.audioOnly=v.optBoolean("audioOnly",false);
             c.sourceDurationMs=v.getLong("sourceDurationMs"); c.inMs=v.getLong("inMs"); c.outMs=v.getLong("outMs");
             c.effect=v.getInt("effect"); c.intensity=(float)v.getDouble("intensity"); c.opacity=(float)v.getDouble("opacity");
             c.volume=(float)v.getDouble("volume"); c.transition=v.getInt("transition"); c.transitionMs=v.getLong("transitionMs"); c.easing=v.getInt("easing"); p.clips.add(c); }

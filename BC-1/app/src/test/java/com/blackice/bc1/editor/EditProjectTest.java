@@ -16,4 +16,5 @@ public class EditProjectTest {
     @Test public void snapUsesClosestTimelineEdgeAndClamps(){EditProject p=project();p.clips.get(0).transition=0;assertEquals(3500,p.snap(3515,30));assertEquals(3515,p.snap(3515,10));assertEquals(0,p.snap(-400,10));assertEquals(6500,p.snap(9000,10));}
     @Test(expected=IllegalArgumentException.class) public void nonfiniteEffectRejected(){EditProject p=project();p.clips.get(0).intensity=Float.NaN;p.validate();}
     @Test(expected=IllegalArgumentException.class) public void unsafeProjectPathRejected(){EditProject p=project();p.id="../../project";p.validate();}
+    @Test public void audioOnlyPlacementCannotBecomeVisual(){EditProject p=project();EditProject.Clip audio=clip(1000);audio.audioOnly=true;audio.track=4;p.clips.add(audio);p.validate();try{p.setPlacement(2,1,0);fail("Audio-only file must not become a video layer");}catch(IllegalArgumentException expected){}assertEquals(4,audio.track);assertTrue(audio.copy().audioOnly);}
 }

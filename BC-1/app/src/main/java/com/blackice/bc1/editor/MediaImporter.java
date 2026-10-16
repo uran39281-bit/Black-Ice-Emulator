@@ -71,6 +71,7 @@ public final class MediaImporter {
                     String duration=metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
                     clip.sourceDurationMs=duration==null?0:Long.parseLong(duration);clip.outMs=clip.sourceDurationMs;
                     boolean hasVideo="yes".equals(metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO));
+                    clip.audioOnly=!hasVideo;
                     boolean hasAudio="yes".equals(metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO));
                     if(clip.sourceDurationMs<EditProject.MIN_CLIP_MS || (audioOnly?!hasAudio:!hasVideo))
                         throw new IOException(audioOnly?"No playable audio was found.":"No playable video was found. Use Music for audio files.");

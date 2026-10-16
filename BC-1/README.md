@@ -1,3 +1,11 @@
+# BC-1 v1.0 release candidate
+
+Development continues on `bc-1-v1.0` from the tested v0.5 Motion & Layers engine. This candidate adds V1 UI Lock, real thumbnail timelines, a dedicated media browser in large DeX windows, consistent cyan controls, and safer audio-only lane placement. Release status and remaining checks are in [NIGHT-WORK.md](../NIGHT-WORK.md).
+
+APK downloads have moved to [the dedicated bc-1 repository](https://github.com/uran39281-bit/bc-1). Previous source branches remain preserved.
+
+---
+
 # BC-1 v0.5 — Motion & Layers
 
 Development branch: `bc-1-v0.5-motion`. See [v0.5 architecture and controls](V0.5-ARCHITECTURE.md). Adds independent layers, source-time keyframes, cubic Bézier easing, chroma controls, audio extraction/fades/waveforms, project bundles and DeX interactions while retaining v0.4 project compatibility.

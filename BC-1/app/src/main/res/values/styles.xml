@@ -1,0 +1,12 @@
+<resources>
+    <style name="BlackIceTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:colorAccent">#40BFFF</item>
+        <item name="android:windowBackground">#090F19</item>
+        <item name="android:colorBackground">#111C2A</item>
+        <item name="android:textColorPrimary">#E6F5FF</item>
+        <item name="android:textColorSecondary">#91A7BC</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">#090F19</item>
+    </style>
+</resources>

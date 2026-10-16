@@ -31,7 +31,10 @@ public final class EditorActivity extends Activity {
     private CompositionPlayer player;
     private SurfaceView surface;
     private FrameLayout monitor;
-    private LinearLayout inspector;
+    private LinearLayout inspector,mediaBrowser;
+    private ThumbnailCache thumbnails;
+    private boolean uiLocked,previewWarming;
+    private TextView lockButton;
     private static final int AUDIO_LAYER=110,BACKUP=111,RESTORE=112;
     private final java.util.Map<String,float[]> waveforms=new java.util.HashMap<>();
     private int inspectorWidth=300;
@@ -62,6 +65,7 @@ public final class EditorActivity extends Activity {
     }};
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
+        thumbnails=new ThumbnailCache(this);uiLocked=getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean("ui-locked",false);
         store=new ProjectStore(this);inspectorWidth=getSharedPreferences(PREFS,MODE_PRIVATE).getInt("panel-width",300);
         android.content.SharedPreferences exportState=getSharedPreferences(ExportService.PREFS,MODE_PRIVATE);
         if(exportState.getBoolean("running",false)&&!ExportService.isRunning())exportState.edit().putBoolean("running",false)
@@ -82,12 +86,12 @@ public final class EditorActivity extends Activity {
     }
     @Override protected void onStart(){super.onStart();active=true;main.post(pulse);if(!loading)preparePreview(false);}
     @Override protected void onStop(){active=false;main.removeCallbacks(pulse);saveNow();releasePreview();super.onStop();}
-    @Override protected void onDestroy(){main.removeCallbacks(autosave);io.shutdown();super.onDestroy();}
+    @Override protected void onDestroy(){main.removeCallbacks(autosave);io.shutdown();if(thumbnails!=null)thumbnails.close();super.onDestroy();}
     @Override protected void onSaveInstanceState(Bundle state){state.putInt("selected",selected);state.putInt("tab",tab);saveNow();super.onSaveInstanceState(state);}
     @Override public void onConfigurationChanged(Configuration config){super.onConfigurationChanged(config);buildWorkspace();}
     private boolean exporting(){return getSharedPreferences(ExportService.PREFS,MODE_PRIVATE).getBoolean("running",false)||exportLaunching;}
-    private boolean editable(){if(loading||importing){tell("Wait for the current import to finish.");return false;}if(exporting()){tell("Wait for export to finish, or cancel it to continue editing.");return false;}return true;}
-    private void releasePreview(){if(player!=null){project.playheadMs=player.getCurrentPosition();player.release();player=null;}}
+    private boolean editable(){if(uiLocked){tell("UI locked • tap Unlock to edit");return false;}if(loading||importing){tell("Wait for the current import to finish.");return false;}if(exporting()){tell("Wait for export to finish, or cancel it to continue editing.");return false;}return true;}
+    private void releasePreview(){previewWarming=false;if(player!=null){project.playheadMs=player.getCurrentPosition();player.release();player=null;}}
     private void preparePreview(boolean playWhenReady) {
         if(!active||loading||exporting())return;
         long position=project.playheadMs;releasePreview();project.playheadMs=position;
@@ -96,12 +100,15 @@ public final class EditorActivity extends Activity {
             EditProject snapshot=ProjectStore.snapshot(project);
             player=new CompositionPlayer.Builder(this).setVideoGraphFactory(new MultipleInputVideoGraph.Factory(CompositionFactory.frameProcessor()))
                     .setAudioAttributes(new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),true).build();
+            previewWarming=!playWhenReady;
+            if(previewWarming)player.setVolume(0);
             player.addListener(new Player.Listener(){
+                @Override public void onRenderedFirstFrame(){if(previewWarming&&player!=null){previewWarming=false;player.pause();player.setVolume(1);}}
                 @Override public void onPlayerError(PlaybackException error){tell("Preview error: "+error.getMessage()+". Check the selected media or try a lower preview quality.");}
                 @Override public void onPlaybackStateChanged(int state){if(state==Player.STATE_ENDED && player!=null){project.playheadMs=project.durationMs();syncPosition();}}
             });
             player.setVideoSurfaceView(surface);player.setComposition(CompositionFactory.build(this,snapshot,false),Math.min(position,Math.max(0,project.durationMs()-1)));
-            player.prepare();player.setPlayWhenReady(playWhenReady);
+            player.prepare();player.setPlayWhenReady(true);
         } catch(Exception e){tell("Cannot prepare preview: "+e.getMessage());}
     }
     private void remember(){try {undo.addLast(ProjectStore.encode(project));while(undo.size()>30)undo.removeFirst();redo.clear();}catch(Exception e){tell(e.getMessage());}}
@@ -124,22 +131,23 @@ public final class EditorActivity extends Activity {
     private void refreshProject() {
         selected=Math.max(0,Math.min(selected,project.clips.size()-1));
         if(projectLabel!=null)projectLabel.setText(project.name+"  ▾");
-        if(timeline!=null){timeline.getLayoutParams().height=dp(40+lanes().size()*32+56);timeline.requestLayout();timeline.invalidate();}
-        if(monitor!=null)monitor.requestLayout();if(emptyPreview!=null)emptyPreview.setVisibility(project.clips.isEmpty()?View.VISIBLE:View.GONE);renderInspector();syncPosition();
+        if(timeline!=null){timeline.getLayoutParams().height=dp(40+lanes().size()*52+56);timeline.requestLayout();timeline.invalidate();}
+        if(monitor!=null)monitor.requestLayout();if(emptyPreview!=null)emptyPreview.setVisibility(project.clips.isEmpty()?View.VISIBLE:View.GONE);renderInspector();renderMediaBrowser();syncPosition();
     }
     private void syncPosition(){if(time!=null)time.setText(clock(project.playheadMs)+"  /  "+clock(project.durationMs()));if(timeline!=null)timeline.invalidate();}
     private void seek(long ms){project.playheadMs=Math.max(0,Math.min(ms,project.durationMs()));if(player!=null){player.pause();player.seekTo(Math.min(project.playheadMs,Math.max(0,project.durationMs()-1)));}syncPosition();}
-    private void togglePlay(){if(player==null){tell("Import a video or image first.");return;}if(player.isPlaying())player.pause();else{if(player.getPlaybackState()==Player.STATE_ENDED||project.playheadMs>=project.durationMs())player.seekTo(0);player.play();}}
+    private void togglePlay(){if(previewWarming&&player!=null){previewWarming=false;player.setVolume(1);player.play();return;}if(player==null){tell("Import a video or image first.");return;}if(player.isPlaying())player.pause();else{if(player.getPlaybackState()==Player.STATE_ENDED||project.playheadMs>=project.durationMs())player.seekTo(0);player.play();}}
 
     private void buildWorkspace() {
         Configuration c=getResources().getConfiguration();android.view.Display display=getWindowManager().getDefaultDisplay();
         boolean wide=LayoutPolicy.resolve(mode,c.screenWidthDp,c.screenHeightDp,c.smallestScreenWidthDp,display!=null&&display.getDisplayId()!=0)==LayoutPolicy.Workspace.WIDE;
-        navTabs.clear();LinearLayout root=column();root.setBackgroundColor(BG);
+        navTabs.clear();mediaBrowser=null;LinearLayout root=column();root.setBackgroundColor(BG);
         LinearLayout header=row();header.setPadding(dp(10),0,dp(8),0);header.setGravity(Gravity.CENTER_VERTICAL);
         ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.ic_black_ice);logo.setContentDescription("Black Ice mountain mark");header.addView(logo,new LinearLayout.LayoutParams(dp(36),dp(36)));
-        LinearLayout brand=column();brand.setPadding(dp(5),0,dp(4),0);brand.addView(label("Black Ice Editor",15,TEXT,true));
+        LinearLayout brand=column();brand.setPadding(dp(5),0,dp(4),0);brand.addView(label("BLACK ICE",15,TEXT,true));
         projectLabel=label(project.name+"  ▾",11,TEXT,false);projectLabel.setMaxLines(1);brand.addView(projectLabel);brand.setOnClickListener(v->projectsMenu());brand.setContentDescription("Project menu");brand.setFocusable(true);brand.setMinimumHeight(dp(52));
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
+        lockButton=button(uiLocked?"Unlock":"Lock",v->toggleLock());lockButton.setContentDescription("UI Lock");header.addView(lockButton);
         header.addView(button(mode.name(),v->chooseMode()));exportButton=button("Export",v->exportMenu());header.addView(exportButton);
         root.addView(header,new LinearLayout.LayoutParams(-1,dp(56)));
         if(wide) {
@@ -148,21 +156,22 @@ public final class EditorActivity extends Activity {
             String[] names={"Media","Edit","Effects","Layers","Setup"};
             for(int i=0;i<names.length;i++){final int index=i;TextView b=button(names[i],v->{tab=index;renderInspector();});b.setTextSize(11);navTabs.add(b);rail.addView(b,new LinearLayout.LayoutParams(-1,dp(52)));}
             body.addView(rail,new LinearLayout.LayoutParams(dp(76),-1));
+            if(c.screenWidthDp>=1100){ScrollView library=new ScrollView(this);mediaBrowser=column();mediaBrowser.setPadding(dp(10),dp(10),dp(10),dp(10));library.addView(mediaBrowser);library.setBackgroundColor(PANEL);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(220),-1);lp.rightMargin=dp(6);body.addView(library,lp);renderMediaBrowser();}
             LinearLayout center=column();center.setPadding(dp(4),dp(4),dp(6),dp(4));body.addView(center,new LinearLayout.LayoutParams(0,-1,1));
             center.addView(buildMonitor(),new LinearLayout.LayoutParams(-1,0,1));center.addView(transport());center.addView(buildTimeline(),new LinearLayout.LayoutParams(-1,dp(c.screenHeightDp<550?140:176)));
             ScrollView tools=new ScrollView(this);tools.setFillViewport(false);inspector=column();inspector.setPadding(dp(10),dp(10),dp(10),dp(12));tools.addView(inspector);tools.setBackgroundColor(PANEL);
             View divider=new View(this);divider.setBackgroundColor(0xFF284B60);divider.setContentDescription("Drag to resize tool panel");body.addView(divider,new LinearLayout.LayoutParams(dp(8),-1));
             body.addView(tools,new LinearLayout.LayoutParams(dp(Math.min(inspectorWidth,c.screenWidthDp<1000?250:500)),-1));
-            divider.setOnTouchListener(new View.OnTouchListener(){float down;int initial;public boolean onTouch(View v,MotionEvent e){if(e.getAction()==MotionEvent.ACTION_DOWN){down=e.getRawX();initial=tools.getWidth();return true;}if(e.getAction()==MotionEvent.ACTION_MOVE){int width=Math.max(dp(180),Math.min(body.getWidth()/2,initial+(int)(down-e.getRawX())));tools.getLayoutParams().width=width;tools.requestLayout();inspectorWidth=Math.round(width/getResources().getDisplayMetrics().density);return true;}if(e.getAction()==MotionEvent.ACTION_UP)getSharedPreferences(PREFS,MODE_PRIVATE).edit().putInt("panel-width",inspectorWidth).apply();return true;}});
+            divider.setOnTouchListener(new View.OnTouchListener(){float down;int initial;public boolean onTouch(View v,MotionEvent e){if(uiLocked)return true;if(e.getAction()==MotionEvent.ACTION_DOWN){down=e.getRawX();initial=tools.getWidth();return true;}if(e.getAction()==MotionEvent.ACTION_MOVE){int width=Math.max(dp(180),Math.min(body.getWidth()/2,initial+(int)((getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean("panel-left",false)?-1:1)*(down-e.getRawX()))));tools.getLayoutParams().width=width;tools.requestLayout();inspectorWidth=Math.round(width/getResources().getDisplayMetrics().density);return true;}if(e.getAction()==MotionEvent.ACTION_UP)getSharedPreferences(PREFS,MODE_PRIVATE).edit().putInt("panel-width",inspectorWidth).apply();return true;}});
             if(getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean("panel-left",false)){body.removeView(tools);body.removeView(divider);body.addView(tools,1);body.addView(divider,2);}
-            body.setOnDragListener((v,event)->{if(event.getLocalState()!=tools)return false;if(event.getAction()==android.view.DragEvent.ACTION_DROP){boolean left=event.getX()<body.getWidth()/2f;body.removeView(tools);body.removeView(divider);if(left){body.addView(tools,1);body.addView(divider,2);}else{body.addView(divider);body.addView(tools);}getSharedPreferences(PREFS,MODE_PRIVATE).edit().putBoolean("panel-left",left).apply();return true;}return true;});
+            body.setOnDragListener((v,event)->{if(uiLocked||event.getLocalState()!=tools)return false;if(event.getAction()==android.view.DragEvent.ACTION_DROP){boolean left=event.getX()<body.getWidth()/2f;body.removeView(tools);body.removeView(divider);if(left){body.addView(tools,1);body.addView(divider,2);}else{body.addView(divider);body.addView(tools);}getSharedPreferences(PREFS,MODE_PRIVATE).edit().putBoolean("panel-left",left).apply();return true;}return true;});
         } else {
             LinearLayout content=column();content.setPadding(dp(8),0,dp(8),0);
             boolean compact=c.screenHeightDp<700;
             if(compact){ScrollView all=new ScrollView(this);all.setFillViewport(true);all.addView(content);root.addView(all,new LinearLayout.LayoutParams(-1,0,1));}
             else root.addView(content,new LinearLayout.LayoutParams(-1,0,1));
             content.addView(buildMonitor(),new LinearLayout.LayoutParams(-1,dp(c.screenHeightDp<780?170:210)));
-            content.addView(transport());content.addView(buildTimeline(),new LinearLayout.LayoutParams(-1,dp(170)));
+            content.addView(transport());content.addView(buildTimeline(),new LinearLayout.LayoutParams(-1,dp(176)));
             inspector=column();inspector.setPadding(dp(8),dp(10),dp(8),dp(14));
             if(compact)content.addView(inspector);else{ScrollView tools=new ScrollView(this);tools.addView(inspector);content.addView(tools,new LinearLayout.LayoutParams(-1,0,1));}
             LinearLayout tabs=row();String[] names={"Media","Edit","Effects","Layers","Setup"};
@@ -192,13 +201,13 @@ public final class EditorActivity extends Activity {
         controls.addView(button("+",v->{pixelsPerSecond=Math.min(240,pixelsPerSecond*1.5f);timeline.requestLayout();}));return controls;
     }
     private java.util.List<Integer> lanes(){java.util.List<Integer> list=new ArrayList<>();list.add(0);for(int i=1;i<8;i++){final int t=i;if(project.clips.stream().anyMatch(c->c.track==t))list.add(i);}return list;}
-    private View buildTimeline(){ScrollView vertical=new ScrollView(this);timelineScroll=new HorizontalScrollView(this);timelineScroll.setFillViewport(true);timeline=new TimelineCanvas();timelineScroll.addView(timeline,new HorizontalScrollView.LayoutParams(-2,dp(40+lanes().size()*32+56)));vertical.addView(timelineScroll);return vertical;}
+    private View buildTimeline(){ScrollView vertical=new ScrollView(this);timelineScroll=new HorizontalScrollView(this);timelineScroll.setFillViewport(true);timeline=new TimelineCanvas();timelineScroll.addView(timeline,new HorizontalScrollView.LayoutParams(-2,dp(40+lanes().size()*52+56)));vertical.addView(timelineScroll);return vertical;}
     private EditProject.Clip clip(){return project.clips.isEmpty()?null:project.clips.get(selected);}
     private void renderInspector() {
         if(inspector==null)return;inspector.removeAllViews();
         for(int i=0;i<navTabs.size();i++){navTabs.get(i).setTextColor(i==tab?CYAN:TEXT);navTabs.get(i).setBackground(buttonBackground(i==tab));navTabs.get(i).setSelected(i==tab);}
         String[] headings={"MEDIA LIBRARY","CLIP EDITOR","GPU EFFECTS","OVERLAYS & MUSIC","PROJECT SETTINGS"};
-        TextView heading=label(headings[tab],12,CYAN,true);inspector.addView(heading);heading.setContentDescription(headings[tab]+". Long press and drag to dock the tool panel in wide mode.");heading.setOnLongClickListener(v->{if(inspector.getParent() instanceof ScrollView){v.startDragAndDrop(ClipData.newPlainText("panel","tools"),new View.DragShadowBuilder(v),inspector.getParent(),0);return true;}return false;});
+        TextView heading=label(headings[tab],12,CYAN,true);inspector.addView(heading);heading.setContentDescription(headings[tab]+". Long press and drag to dock the tool panel in wide mode.");heading.setOnLongClickListener(v->{if(uiLocked)return false;if(inspector.getParent() instanceof ScrollView){v.startDragAndDrop(ClipData.newPlainText("panel","tools"),new View.DragShadowBuilder(v),inspector.getParent(),0);return true;}return false;});
         if(tab==0) {
             inspector.addView(note("Videos and images are copied into this app so saved projects can reopen reliably."));
             addAction("+ Import video / image",()->pick(IMPORT,"*/*"));
@@ -246,7 +255,7 @@ public final class EditorActivity extends Activity {
             addAction("Restore project bundle",()->pick(RESTORE,"*/*"));
             addAction("Projects / New / Rename",()->projectsMenu());
             addAction("Open v0.3 effects lab",()->startActivity(new Intent(this,WorkbenchActivity.class)));
-            inspector.addView(note("BC-1 v0.5 Preview\nExport: H.264 MP4 + AAC, 1080p, up to 30 fps. Lower-rate sources keep their cadence.\nSpace: play • Ctrl+Z/Y: undo/redo • Ctrl+S: save\nS: split • arrows: frame step • Ctrl+D: duplicate\nCtrl+wheel: zoom • Shift+wheel: scroll • right-click: clip menu\n3D Page Curl remains excluded."));
+            inspector.addView(note("BC-1 v1.0 RC1\nExport: H.264 MP4 + AAC, 1080p, up to 30 fps. Lower-rate sources keep their cadence.\nSpace: play • Ctrl+Z/Y: undo/redo • Ctrl+S: save\nS: split • arrows: frame step • Ctrl+D: duplicate\nCtrl+wheel: zoom • Shift+wheel: scroll • right-click: clip menu\n3D Page Curl remains excluded."));
         }
     }
     private void moveClip(int delta){if(!editable())return;int next=selected+delta;if(next<0||next>=project.clips.size())return;remember();project.move(selected,delta);selected=next;changed("Clip moved");}
@@ -293,7 +302,7 @@ public final class EditorActivity extends Activity {
         }).show();
     }
     private void openProject(String id){loading=true;releasePreview();io.execute(()->{try{EditProject loaded=store.load(id);main.post(()->{if(isDestroyed())return;loading=false;project=loaded;undo.clear();redo.clear();selected=0;changed("Project opened");});}catch(Exception e){main.post(()->{loading=false;tell("Cannot open project: "+e.getMessage());});}});}
-    private void chooseMode(){new AlertDialog.Builder(this).setTitle("Workspace layout").setSingleChoiceItems(new String[]{"Auto • phone / tablet / DeX","Phone portrait workspace","Wide tablet / DeX workspace"},mode.ordinal(),(d,i)->{mode=LayoutPolicy.Preference.values()[i];getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString("mode",mode.name()).apply();d.dismiss();buildWorkspace();}).show();}
+    private void chooseMode(){if(uiLocked){tell("Unlock to change workspace layout");return;}new AlertDialog.Builder(this).setTitle("Workspace layout").setSingleChoiceItems(new String[]{"Auto • phone / tablet / DeX","Phone portrait workspace","Wide tablet / DeX workspace"},mode.ordinal(),(d,i)->{mode=LayoutPolicy.Preference.values()[i];getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString("mode",mode.name()).apply();d.dismiss();buildWorkspace();}).show();}
     private void pick(int request,String type) {
         if(!editable())return;if(request==OVERLAY&&project.overlays.size()>=20){tell("This preview supports up to 20 overlays.");return;}Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType(type).addCategory(Intent.CATEGORY_OPENABLE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         if(request==IMPORT){intent.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"video/*","image/*"});intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);}
@@ -313,7 +322,7 @@ public final class EditorActivity extends Activity {
             for(Uri uri:uris)try{imported.add(new MediaImporter(this).importClip(uri,(request==MUSIC||request==AUDIO_LAYER),request==OVERLAY?1024:2048));}catch(Exception e){errors.add(e.getMessage());}
             main.post(()->{importing=false;if(isDestroyed())return;remember();
                 for(EditProject.Clip c:imported){
-                    if(request==AUDIO_LAYER){try{c.track=project.freeAudioTrack(project.playheadMs,c.durationMs());c.startMs=project.playheadMs;project.clips.add(c);selected=project.clips.size()-1;tab=1;}catch(Exception e){errors.add(e.getMessage());}}
+                    if(request==AUDIO_LAYER){try{if(project.clips.size()>=100)throw new IllegalArgumentException("The 100-clip limit was reached");c.track=project.freeAudioTrack(project.playheadMs,c.durationMs());c.startMs=project.playheadMs;project.clips.add(c);selected=project.clips.size()-1;tab=1;}catch(Exception e){errors.add(e.getMessage());}}
                     else if(request==MUSIC){EditProject.Music m=new EditProject.Music();m.uri=c.uri;m.name=c.name;m.sourceDurationMs=c.sourceDurationMs;m.outMs=c.outMs;project.music=m;tab=3;}
                     else if(request==OVERLAY){EditProject.Overlay o=new EditProject.Overlay();o.imageUri=c.uri;o.startMs=project.playheadMs;o.endMs=Math.max(o.startMs+100,Math.min(project.durationMs(),o.startMs+3000));project.overlays.add(o);tab=3;}
                     else {if(project.clips.size()>=100){errors.add("The 100-clip project limit was reached.");new File(Uri.parse(c.uri).getPath()).delete();continue;}project.clips.add(c);selected=project.clips.size()-1;}
@@ -325,7 +334,7 @@ public final class EditorActivity extends Activity {
     }
     private void exportMenu() {
         if(exporting()){new AlertDialog.Builder(this).setTitle("Cancel current export?").setMessage(getSharedPreferences(ExportService.PREFS,MODE_PRIVATE).getString("status","Export running")).setPositiveButton("Cancel export",(d,w)->startService(new Intent(this,ExportService.class).setAction(ExportService.ACTION_CANCEL))).setNegativeButton("Keep exporting",null).show();return;}
-        if(!editable()||project.clips.isEmpty()){tell("Import at least one video or image before exporting.");return;}
+        if(loading||importing)return;if(project.clips.isEmpty()){tell("Import at least one video or image before exporting.");return;}
         new AlertDialog.Builder(this).setTitle("Export MP4").setMessage(project.name+"\n"+(project.portrait?"1080 × 1920":"1920 × 1080")+" • H.264 + AAC • up to 30 fps\n"+clock(project.durationMs())+"\n\nChoose where to save the finished video. Export can continue in the background.")
                 .setPositiveButton("Choose destination",(d,w)->{Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("video/mp4").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,project.name.replaceAll("[^a-zA-Z0-9 ._-]","_")+".mp4");startActivityForResult(intent,EXPORT);}).setNegativeButton("Cancel",null).show();
     }
@@ -347,12 +356,12 @@ public final class EditorActivity extends Activity {
         if(key==KeyEvent.KEYCODE_FORWARD_DEL){if(editable()&&clip()!=null){remember();project.clips.remove(selected);changed("Clip removed");}return true;}
         return super.onKeyDown(key,event);
     }
-    private void duplicateSelected(){EditProject.Clip c=clip();if(c==null||!editable())return;EditProject.Clip copy=c.copy();if(c.track>0)copy.startMs=project.placements().get(selected).endMs;remember();project.clips.add(selected+1,copy);try{project.validate();selected++;changed("Clip duplicated");}catch(Exception e){project.clips.remove(copy);tell(e.getMessage());}}
+    private void duplicateSelected(){EditProject.Clip c=clip();if(c==null||!editable())return;if(project.clips.size()>=100){tell("The 100-clip limit was reached");return;}EditProject.Clip copy=c.copy();if(c.track>0)copy.startMs=project.placements().get(selected).endMs;remember();project.clips.add(selected+1,copy);try{project.validate();selected++;changed("Clip duplicated");}catch(Exception e){project.clips.remove(copy);tell(e.getMessage());}}
     private void placementDialog(){EditProject.Clip c=clip();if(c==null||!editable())return;LinearLayout f=form();EditText track=field(f,"0: main sequence · 1–3: video layers · 4–7: audio",String.valueOf(c.track)),start=field(f,"Timeline start (seconds; independent layers)",seconds(project.placements().get(selected).startMs));dialog("Layer placement",f,()->{int t=Integer.parseInt(track.getText().toString());long ms=parseMs(start.getText().toString());remember();project.setPlacement(selected,t,ms);changed("Layer placement updated");},null);}
     private void fadeDialog(){EditProject.Clip c=clip();LinearLayout f=form();EditText in=field(f,"Fade in (seconds)",seconds(c.fadeInMs)),out=field(f,"Fade out (seconds)",seconds(c.fadeOutMs));dialog("Audio fades",f,()->{long a=parseMs(in.getText().toString()),b=parseMs(out.getText().toString());if(a<0||b<0||a>c.durationMs()||b>c.durationMs())throw new IllegalArgumentException("Fades must fit inside the clip");remember();c.fadeInMs=a;c.fadeOutMs=b;changed("Audio fades updated");},null);}
     private void extractAudio(){EditProject.Clip source=clip();if(source==null||source.image||!editable())return;
         CheckBox mute=new CheckBox(this);mute.setText("Mute original video");mute.setTextColor(TEXT);mute.setChecked(true);
-        new AlertDialog.Builder(this).setTitle("Extract independent audio").setView(mute).setPositiveButton("Extract",(d,w)->{long start=project.placements().get(selected).startMs;importing=true;io.execute(()->{try{if(!AudioWaveform.hasAudio(this,source.uri))throw new IllegalArgumentException("This source has no audio track");main.post(()->{importing=false;if(isDestroyed())return;try{EditProject.Clip audio=source.copy();audio.name=source.name+" • audio";audio.track=project.freeAudioTrack(start,audio.durationMs());audio.startMs=start;audio.transition=-1;remember();project.clips.add(audio);if(mute.isChecked())source.volume=0;selected=project.clips.size()-1;changed("Audio extracted independently");loadWaveform(audio);}catch(Exception e){tell(e.getMessage());}});}catch(Exception e){main.post(()->{importing=false;tell(e.getMessage());});}});}).setNegativeButton("Cancel",null).show();
+        new AlertDialog.Builder(this).setTitle("Extract independent audio").setView(mute).setPositiveButton("Extract",(d,w)->{long start=project.placements().get(selected).startMs;importing=true;io.execute(()->{try{if(!AudioWaveform.hasAudio(this,source.uri))throw new IllegalArgumentException("This source has no audio track");main.post(()->{importing=false;if(isDestroyed())return;try{if(project.clips.size()>=100)throw new IllegalArgumentException("The 100-clip limit was reached");EditProject.Clip audio=source.copy();audio.name=source.name+" • audio";audio.track=project.freeAudioTrack(start,audio.durationMs());audio.startMs=start;audio.transition=-1;remember();project.clips.add(audio);if(mute.isChecked())source.volume=0;selected=project.clips.size()-1;changed("Audio extracted independently");loadWaveform(audio);}catch(Exception e){tell(e.getMessage());}});}catch(Exception e){main.post(()->{importing=false;tell(e.getMessage());});}});}).setNegativeButton("Cancel",null).show();
     }
     private void loadWaveform(EditProject.Clip c){if(waveforms.containsKey(c.uri)){tell("Waveform ready");return;}tell("Decoding audio waveform…");io.execute(()->{try{float[] peaks=AudioWaveform.read(this,c.uri,c.sourceDurationMs);main.post(()->{waveforms.put(c.uri,peaks);if(timeline!=null)timeline.invalidate();tell("Waveform ready");});}catch(Exception e){main.post(()->tell("Waveform: "+e.getMessage()));}});}
     private void bundle(int request,Uri uri){if(!editable())return;saveNow();EditProject snapshot=ProjectStore.snapshot(project);importing=true;tell(request==BACKUP?"Saving project and media…":"Restoring project and media…");io.execute(()->{try{if(request==BACKUP){ProjectBundle.write(this,snapshot,getContentResolver().openOutputStream(uri,"wt"));main.post(()->{importing=false;tell("Project bundle saved");});}else{EditProject restored=ProjectBundle.read(this,getContentResolver().openInputStream(uri));main.post(()->{importing=false;if(isDestroyed())return;releasePreview();project=restored;undo.clear();redo.clear();selected=0;changed("Project restored as a new copy");});}}catch(Exception e){if(request==BACKUP)try{android.provider.DocumentsContract.deleteDocument(getContentResolver(),uri);}catch(Exception ignored){}main.post(()->{importing=false;tell("Bundle failed: "+e.getMessage());});}});}
@@ -381,19 +390,20 @@ public final class EditorActivity extends Activity {
         private float x(long ms){return dp(12)+ms/1000f*timelineScale();}
         @Override protected void onMeasure(int w,int h){setMeasuredDimension(View.resolveSize(Math.max(dp(280),Math.min(dp(30000),(int)x(project.durationMs())+dp(30))),w),View.MeasureSpec.getSize(h));}
         @Override protected void onDraw(Canvas canvas){
-            canvas.drawColor(PANEL);int height=getHeight();float mainY=dp(35),clipH=dp(28);java.util.List<Integer> laneList=lanes();
+            canvas.drawColor(PANEL);int height=getHeight();float mainY=dp(35),clipH=dp(48);java.util.List<Integer> laneList=lanes();
             paint.setTextSize(dp(10));paint.setTypeface(Typeface.DEFAULT);paint.setColor(MUTED);
             long interval=1000;while(interval/1000f*timelineScale()<dp(55))interval*=2;
             for(long ms=0;ms<=project.durationMs();ms+=interval){float xx=x(ms);canvas.drawText(seconds(ms)+"s",xx,dp(16),paint);canvas.drawLine(xx,dp(21),xx,height,paint);}
             java.util.List<EditProject.Placement> placements=project.placements();
-            for(EditProject.Placement p:placements){mainY=dp(35+laneList.indexOf(p.clip.track)*32);float left=x(p.startMs),right=x(p.endMs);paint.setColor(p.index==selected?0xFF226D99:0xFF204057);canvas.drawRoundRect(left,mainY,right,mainY+clipH,dp(5),dp(5),paint);
+            for(EditProject.Placement p:placements){mainY=dp(35+laneList.indexOf(p.clip.track)*52);float left=x(p.startMs),right=x(p.endMs);paint.setColor(p.index==selected?0xFF226D99:0xFF204057);canvas.drawRoundRect(left,mainY,right,mainY+clipH,dp(5),dp(5),paint);
+                if(p.clip.track<4&&right>canvas.getClipBounds().left&&left<canvas.getClipBounds().right){Bitmap thumb=thumbnails.get(p.clip,()->{if(!isDestroyed()&&timeline!=null)timeline.invalidate();});if(thumb!=null){canvas.save();canvas.clipRect(left+dp(1),mainY+dp(1),right-dp(1),mainY+clipH-dp(1));float tw=clipH*thumb.getWidth()/thumb.getHeight();for(float tx=left;tx<right;tx+=tw)canvas.drawBitmap(thumb,null,new RectF(tx,mainY,tx+tw,mainY+clipH),paint);paint.setColor(0xAA08131F);canvas.drawRect(left,mainY+clipH-dp(21),right,mainY+clipH,paint);canvas.restore();}}
                 paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(p.index==selected?2:1));paint.setColor(p.index==selected?CYAN:0xFF3B677C);canvas.drawRoundRect(left,mainY,right,mainY+clipH,dp(5),dp(5),paint);paint.setStyle(Paint.Style.FILL);
-                canvas.save();canvas.clipRect(left+dp(4),mainY,right-dp(3),mainY+clipH);paint.setColor(TEXT);paint.setTextSize(dp(11));canvas.drawText((p.clip.track>=4?"A"+(p.clip.track-3):"V"+p.clip.track)+"  "+p.clip.name,left+dp(7),mainY+dp(19),paint);canvas.restore();
+                canvas.save();canvas.clipRect(left+dp(4),mainY,right-dp(3),mainY+clipH);paint.setColor(TEXT);paint.setTextSize(dp(11));canvas.drawText((p.clip.track>=4?"A"+(p.clip.track-3):"V"+p.clip.track)+"  "+p.clip.name,left+dp(7),mainY+clipH-dp(6),paint);canvas.restore();
                 float[] peaks=waveforms.get(p.clip.uri);if(peaks!=null){paint.setColor(0xFF74D3C1);for(float xx=left;xx<right;xx+=dp(3)){long source=p.clip.inMs+(long)((xx-left)/(right-left)*p.clip.durationMs());int bin=(int)Math.min(511,source*512/Math.max(1,p.clip.sourceDurationMs));float amplitude=peaks[Math.max(0,bin)]*dp(10);canvas.drawLine(xx,mainY+clipH/2-amplitude,xx,mainY+clipH/2+amplitude,paint);}}
                 if(p.outgoingMs>0){paint.setColor(0x9940BFFF);canvas.drawRect(x(p.endMs-p.outgoingMs),mainY,right,mainY+clipH,paint);}
             }
             paint.setColor(MUTED);paint.setTextSize(dp(10));if(placements.isEmpty())canvas.drawText("IMPORT MEDIA TO BUILD YOUR TIMELINE",dp(12),mainY+dp(23),paint);
-            float overlayY=dp(35+laneList.size()*32+4);
+            float overlayY=dp(35+laneList.size()*52+4);
             for(EditProject.Overlay o:project.overlays){paint.setColor(0xFF72549B);canvas.drawRoundRect(x(o.startMs),overlayY,x(Math.min(o.endMs,project.durationMs())),overlayY+dp(22),dp(3),dp(3),paint);}
             if(project.overlays.isEmpty()){paint.setColor(MUTED);canvas.drawText("OVERLAYS",dp(12),overlayY+dp(15),paint);}
             float audioY=overlayY+dp(28);
@@ -403,18 +413,20 @@ public final class EditorActivity extends Activity {
         }
         @Override public boolean onGenericMotionEvent(MotionEvent event){if(event.getAction()==MotionEvent.ACTION_SCROLL){float wheel=event.getAxisValue(MotionEvent.AXIS_VSCROLL);if((event.getMetaState()&KeyEvent.META_CTRL_ON)!=0){pixelsPerSecond=Math.max(8,Math.min(240,pixelsPerSecond*(wheel>0?1.2f:.8333f)));requestLayout();invalidate();}else timelineScroll.smoothScrollBy((int)(-wheel*dp(70)),0);return true;}return super.onGenericMotionEvent(event);}
         @Override public boolean onTouchEvent(android.view.MotionEvent event){
-            if(event.getAction()==MotionEvent.ACTION_DOWN&&event.isButtonPressed(MotionEvent.BUTTON_SECONDARY)){long target=(long)((event.getX()-dp(12))/timelineScale()*1000);int lane=(int)((event.getY()-dp(35))/dp(32));if(lane>=0&&lane<lanes().size())for(EditProject.Placement p:project.placements())if(p.clip.track==lanes().get(lane)&&target>=p.startMs&&target<p.endMs)selected=p.index;seek(target);new AlertDialog.Builder(EditorActivity.this).setTitle("Clip actions").setItems(new String[]{"Edit / trim","Layer placement","Keyframes","Duplicate"},(d,i)->{if(i==0)trimDialog();if(i==1)placementDialog();if(i==2)transformDialog();if(i==3)duplicateSelected();}).show();return true;}
+            if(event.getAction()==MotionEvent.ACTION_DOWN&&event.isButtonPressed(MotionEvent.BUTTON_SECONDARY)){long target=(long)((event.getX()-dp(12))/timelineScale()*1000);int lane=(int)((event.getY()-dp(35))/dp(52));if(lane>=0&&lane<lanes().size())for(EditProject.Placement p:project.placements())if(p.clip.track==lanes().get(lane)&&target>=p.startMs&&target<p.endMs)selected=p.index;seek(target);new AlertDialog.Builder(EditorActivity.this).setTitle("Clip actions").setItems(new String[]{"Edit / trim","Layer placement","Keyframes","Duplicate"},(d,i)->{if(i==0)trimDialog();if(i==1)placementDialog();if(i==2)transformDialog();if(i==3)duplicateSelected();}).show();return true;}
             if(event.getAction()==MotionEvent.ACTION_DOWN){downX=event.getX();dragging=event.getY()<dp(32);if(dragging)getParent().requestDisallowInterceptTouchEvent(true);return true;}
             if(event.getAction()==MotionEvent.ACTION_MOVE&&dragging){long target=(long)((event.getX()-dp(12))/timelineScale()*1000);seek(snapping?project.snap(target,(long)(8000/pixelsPerSecond)):target);return true;}
             if(event.getAction()==MotionEvent.ACTION_UP){long target=(long)((event.getX()-dp(12))/timelineScale()*1000);
                 if(Math.abs(event.getX()-downX)<dp(10)||dragging){
-                    if(!dragging&&event.getY()>=dp(35)&&event.getY()<dp(35+lanes().size()*32)){java.util.List<EditProject.Placement> placements=project.placements();for(int i=placements.size()-1;i>=0;i--){EditProject.Placement p=placements.get(i);if(p.clip.track==lanes().get(Math.min(lanes().size()-1,(int)((event.getY()-dp(35))/dp(32))))&&target>=p.startMs&&target<p.endMs){selected=i;break;}}renderInspector();}
+                    if(!dragging&&event.getY()>=dp(35)&&event.getY()<dp(35+lanes().size()*52)){java.util.List<EditProject.Placement> placements=project.placements();for(int i=placements.size()-1;i>=0;i--){EditProject.Placement p=placements.get(i);if(p.clip.track==lanes().get(Math.min(lanes().size()-1,(int)((event.getY()-dp(35))/dp(52))))&&target>=p.startMs&&target<p.endMs){selected=i;break;}}renderInspector();}
                     seek(snapping?project.snap(target,(long)(8000/pixelsPerSecond)):target);performClick();}
                 dragging=false;getParent().requestDisallowInterceptTouchEvent(false);return true;}
             if(event.getAction()==MotionEvent.ACTION_CANCEL){dragging=false;getParent().requestDisallowInterceptTouchEvent(false);}return true;
         }
         @Override public boolean performClick(){super.performClick();return true;}
     }
+    private void toggleLock(){uiLocked=!uiLocked;getSharedPreferences(PREFS,MODE_PRIVATE).edit().putBoolean("ui-locked",uiLocked).apply();lockButton.setText(uiLocked?"Unlock":"Lock");lockButton.setSelected(uiLocked);lockButton.setTextColor(uiLocked?CYAN:TEXT);tell(uiLocked?"UI locked • playback and seeking remain available":"UI unlocked");}
+    private void renderMediaBrowser(){if(mediaBrowser==null)return;mediaBrowser.removeAllViews();mediaBrowser.addView(label("MEDIA LIBRARY",12,CYAN,true));mediaBrowser.addView(note(project.clips.size()+" clips • originals kept in project"));mediaBrowser.addView(button("+ Import media",v->pick(IMPORT,"*/*")));for(int i=0;i<project.clips.size();i++){final int index=i;EditProject.Clip clip=project.clips.get(i);LinearLayout card=column();card.setPadding(dp(6),dp(6),dp(6),dp(6));card.setBackground(buttonBackground(i==selected));if(clip.track<4){ImageView image=new ImageView(this);image.setScaleType(ImageView.ScaleType.CENTER_CROP);card.addView(image,new LinearLayout.LayoutParams(-1,dp(96)));Bitmap thumb=thumbnails.get(clip,()->{if(!isDestroyed()&&mediaBrowser!=null){Bitmap loaded=thumbnails.peek(clip);if(loaded!=null)image.setImageBitmap(loaded);}});if(thumb!=null)image.setImageBitmap(thumb);}TextView name=label(clip.name,12,TEXT,true);name.setMaxLines(2);card.addView(name);card.addView(note((clip.track>=4?"A"+(clip.track-3):"V"+clip.track)+" • "+clock(clip.durationMs())));card.setFocusable(true);card.setContentDescription("Select "+clip.name);card.setOnClickListener(v->{selected=index;tab=1;seek(project.placements().get(index).startMs);renderInspector();renderMediaBrowser();});LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(8);mediaBrowser.addView(card,lp);}}
     private void tell(String text){message=text==null?"Something went wrong.":text;if(status!=null)status.setText(message);}
     private int dp(float value){return Math.round(value*getResources().getDisplayMetrics().density);}
     private LinearLayout column(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);return l;}
@@ -431,7 +443,7 @@ public final class EditorActivity extends Activity {
     private void slider(String name,float value,ValueAction action){TextView title=note(name+"  "+Math.round(value*100)+"%");inspector.addView(title);SeekBar slider=new SeekBar(this);slider.setMax(100);slider.setProgress(Math.round(value*100));slider.setContentDescription(name);inspector.addView(slider,new LinearLayout.LayoutParams(-1,dp(48)));slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar s,int p,boolean user){title.setText(name+"  "+p+"%");}public void onStartTrackingTouch(SeekBar s){if(player!=null)player.pause();}public void onStopTrackingTouch(SeekBar s){if(editable())action.apply(s.getProgress()/100f);}});}
     private LinearLayout form(){LinearLayout l=column();l.setPadding(dp(18),dp(8),dp(18),dp(10));return l;}
     private EditText field(LinearLayout form,String title,String value){form.addView(note(title));EditText e=new EditText(this);e.setText(value);e.setTextColor(TEXT);e.setSingleLine(false);e.setMinHeight(dp(48));form.addView(e);return e;}
-    private void dialog(String title,LinearLayout form,Runnable apply,Runnable delete){ScrollView scroll=new ScrollView(this);scroll.addView(form);AlertDialog.Builder b=new AlertDialog.Builder(this).setTitle(title).setView(scroll).setPositiveButton("Apply",null).setNegativeButton("Cancel",null);if(delete!=null)b.setNeutralButton("Remove",(d,w)->delete.run());AlertDialog dialog=b.create();dialog.setOnShowListener(x->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{if(!editable())return;try{apply.run();dialog.dismiss();}catch(Exception e){Toast.makeText(this,e.getMessage()==null?"Check the entered values.":e.getMessage(),Toast.LENGTH_LONG).show();}}));dialog.show();}
+    private void dialog(String title,LinearLayout form,Runnable apply,Runnable delete){ScrollView scroll=new ScrollView(this);scroll.addView(form);AlertDialog.Builder b=new AlertDialog.Builder(this).setTitle(title).setView(scroll).setPositiveButton("Apply",null).setNegativeButton("Cancel",null);if(delete!=null)b.setNeutralButton("Remove",(d,w)->{if(editable())delete.run();});AlertDialog dialog=b.create();dialog.setOnShowListener(x->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{if(!editable())return;try{apply.run();dialog.dismiss();}catch(Exception e){Toast.makeText(this,e.getMessage()==null?"Check the entered values.":e.getMessage(),Toast.LENGTH_LONG).show();}}));dialog.show();}
     private void numberDialog(String title,String value,TextAction action){LinearLayout form=form();EditText input=field(form,title,value);dialog(title,form,()->action.apply(input.getText().toString().trim()),null);}
     private static long parseMs(String value){double seconds=Double.parseDouble(value);if(!Double.isFinite(seconds)||Math.abs(seconds)>7_200_000)throw new IllegalArgumentException("Enter a valid time in seconds.");return Math.round(seconds*1000);}
     private static float parseFloat(EditText field){float value=Float.parseFloat(field.getText().toString());if(!Float.isFinite(value))throw new IllegalArgumentException("Enter a finite number.");return value;}
