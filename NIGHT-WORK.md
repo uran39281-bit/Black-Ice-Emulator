@@ -1,16 +1,17 @@
 # BC-1 overnight development checkpoint
 
-## Active follow-up: v1.0.3 thumbnail delivery
+## Latest published work: v1.0.3 thumbnail reliability
 
-Checkpoint 2026-10-16 08:49 UTC: the baseline regression is REPRODUCED. Baseline `31661164b2d0e53166b6842ace987a3860ec95d6`, run `38874632718`, failed exactly the new current-thumbnail pixel assertion (17 other Android tests passed). Candidate `261c82dea4bc2628953c62d2a0b262f37945764b`, run `38874891062`, fixes that test and retains the card object. Build passed: 33 unit tests, lint 0 errors /30 warnings. However attempt 1 has one different Android failure: `projectRoundTripEditsMusicTextAnd1080pExport` reports `Export failed: Muxer error`; independent MP4 validation was not reached. Requested ONE unchanged failed-job rerun at08:47 UTC. Read its latest attempt before publishing. Do not erase the failed-attempt evidence or label the entire candidate verified yet. `BC-1-v1.0.3-QA.md` records evidence and investigation.
+Continue `bc-1-v1.0.3-thumbnails` unless a newer active follow-up is recorded above. Tested source `261c82dea4bc2628953c62d2a0b262f37945764b`, Actions `38874891062` attempt2: 33 unit +18 Android tests, lint0errors30warnings; independent MP4 decode/format gate passed. Final paused-first-frame, phone9:16, wide16:9, compact-wide and thumbnail-stress screenshots reviewed. Baseline run38874632718 reproduced the stale thumbnail; current-view observer fix passes in both candidate attempts.
 
-Attempt-1 phone9:16, wide16:9, compact-wide and thumbnail-stress screenshots were reviewed. Current filtered thumbnail has real blue pixels, main phone/wide fixtures have real layered preview frames, and layout is preserved. Stress capture has an in-progress preview banner (not a preview-readiness test). GPU artifact12035510441 contains logs/screenshots; build12035250628; APK12035420232.
+IMPORTANT: candidate attempt1 failed one export with `Muxer error`; unchanged rerun passed. This does not prove the initiating cause fixed. Keep this intermittent reliability caveat in QA; do not call the build production-stable. A useful next step is debug ExportException cause logging and repeat-export tests without skipping or weakening any gate.
 
-Signed but UNPUBLISHED candidate: `/workspace/scratch/9d8e062dc089/deliverables/BC-1-v1.0.3.apk`, SHA256 `11b5a3cb9119492afc75c78dd4953a36cfcf8d2da13352376be2810b0876d653`, code15/name1.0.3. Certificate matches retained key. Binary blob already staged in APK repo: `5f5a2fcc69a6ef045054a2b94af9cef08120219e` (not in any published tree). Do not upload duplicate or overwrite old versions. Only publish if rerun qualification is complete; disclose first-attempt failure. If it fails again, add debug ExportException cause logging and investigate actual failure; do not skip/relax tests. Then rebuild, re-sign and replace this unpublished candidate with newly tested bytes. v1.0.2 remains latest verified download.
+APK: https://raw.githubusercontent.com/uran39281-bit/bc-1/main/v1.0.3/BC-1-v1.0.3.apk
+QA: https://github.com/uran39281-bit/bc-1/blob/main/v1.0.3/QA.md
+SHA256: `11b5a3cb9119492afc75c78dd4953a36cfcf8d2da13352376be2810b0876d653`.
+Package `com.blackice.bc1.preview`, code15/name1.0.3; retained signing certificate matches. Published APK repo commit `df158f449c8ae7318801aa92fe81f0abdb2b5e91`; raw downloaded bytes compared identical. Saved identity `libfile_459142f5a7188191a1cbaddb8f965758`. Local APK `/workspace/scratch/9d8e062dc089/deliverables/BC-1-v1.0.3.apk`. Artifacts: APK12035420232, build12035250628, failing GPU12035510441, passing GPU12036120835.
 
-Continue `bc-1-v1.0.3-thumbnails`. A new Android test deliberately blocks the thumbnail worker, changes search 32 times, then checks that the CURRENT card receives decoded pixels. Baseline `31661164b2d0e53166b6842ace987a3860ec95d6` exercises the v1.0.2 callback implementation; do not publish its artifact (old manifest). The candidate uses stable activity-level observers for current browser/timeline views and updates thumbnail images in place, retaining bounded caching/background decoding and avoiding obsolete-card references. Candidate versionName1.0.3/code15. Baseline failure, candidate success, all tests and screenshots must be checked before publishing a NEW v1.0.3 APK. v1.0.2 remains the latest verified download until then.
-
-## Latest verified work: v1.0.2 V1 media browser
+## Preserved v1.0.2 V1 media browser
 
 Continue `bc-1-v1.0.2-media`. Tested source `5e551384278f03270258ff7149c4f36a3fe0d1ce`, Actions run `38871745189`: both jobs succeeded. 33 unit +17 Android tests passed, lint 0 errors /30 warnings. Independent ffmpeg decode and ffprobe H.264 1920×1080/AAC/duration gate passed. Final phone, wide, filtered-wide and compact-wide screenshots visually reviewed.
 
@@ -54,7 +55,7 @@ v1.0.1 adds monoline icons, nine functional editing shortcuts, preview scrubber,
 
 User authorized ongoing improvements until 2026-10-16 04:30 America/Phoenix (11:30 UTC); suppress notifications until then. Deliver the latest VERIFIED direct GitHub APK link at that time, with concise test results and physical-device limits. ChatGPT file links previously failed with a cross-site URL error.
 
-First complete the pending v1.0.3 qualification above; latest rerun GPU job is116891243175. The thumbnail risk is now reproduced and the fix passes its deterministic regression, but the separate export failure must remain visible in QA. Remaining V1 differences are the dedicated project-flow screen and category-specific inspector. Prefer a small complete, tested improvement next. Inspect existing code and actual references before editing. Do not merely bump the version. Any version after a published v1.0.3 must increment versionCode above15 and use a new branch/versioned directory. Preserve older downloads. Read fresh branch heads before guarded GitHub ref updates. Update this checkpoint AND the pointer on `bc-1-v1.0` so later runs find the latest branch.
+Next: investigate the intermittent export failure with full debug causes and repeated service exports. Preserve v1.0.3 as the latest published development download, with its caveat; only publish changed application bytes under a NEW versionCode/path. Remaining V1 differences are the dedicated project-flow screen and category-specific inspector. Read fresh branch heads before guarded ref updates and keep the bc-1-v1.0 pointer current.
 
 ## Architecture and limits
 
