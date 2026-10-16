@@ -1,3 +1,9 @@
+# Active follow-up: bc-1-v1.0.3-thumbnails
+
+Read NIGHT-WORK.md on `bc-1-v1.0.3-thumbnails` for active development. Candidate `261c82dea4bc2628953c62d2a0b262f37945764b`, run `38874891062`, uses stable browser/timeline thumbnail observers. Regression baseline `31661164b2d0e53166b6842ace987a3860ec95d6`, run `38874632718`, intentionally exercises the previous callbacks; its artifact MUST NOT be published. Check both results, review screenshots, and publish only verified v1.0.3/code15 under a new versioned path. v1.0.2 below remains the verified download until those gates pass.
+
+---
+
 # Latest verified development: bc-1-v1.0.2-media
 
 Read NIGHT-WORK.md on `bc-1-v1.0.2-media` before continuing. Latest checkpoint `967a884d791fb643809f0ae2ff6bef3fd2ad4c01`; tested source `5e551384278f03270258ff7149c4f36a3fe0d1ce`; Actions `38871745189`: 33 unit +17 Android tests passed, lint0errors30warnings, independent MP4 decode passed. Phone/wide/filtered-wide/compact-wide screenshots reviewed.
