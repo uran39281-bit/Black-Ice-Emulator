@@ -1,12 +1,14 @@
-# BC-1 v1.0 is available
+# BC-1 v1.0.1 is available
 
-[Download the Android APK](https://raw.githubusercontent.com/uran39281-bit/bc-1/main/v1.0/BC-1-v1.0.apk) · [Separate APK repository](https://github.com/uran39281-bit/bc-1) · [QA and checksum](https://github.com/uran39281-bit/bc-1/tree/main/v1.0)
+[Download the Android APK](https://raw.githubusercontent.com/uran39281-bit/bc-1/main/v1.0.1/BC-1-v1.0.1.apk) · [Separate APK repository](https://github.com/uran39281-bit/bc-1) · [QA and checksum](https://github.com/uran39281-bit/bc-1/tree/main/v1.0.1)
 
 Continues the v0.2 Dual Workspace foundation with the dark/cyan V1 interface, UI Lock, phone and tablet/DeX layouts, thumbnail timeline, media browser, layered effects/keyframes, cached previews and 1080p export. 30 unit tests +17 Android tests passed; exported MP4 independently decoded. Physical Snapdragon/DeX performance remains unmeasured. Old branches and APKs are preserved.
 
+v1.0.1 brings the recovered official V1 references into the repository and adds monoline icons, editing shortcuts, a preview scrubber and pinned track labels. [Verification](BC-1-v1.0.1-QA.md).
+
 # BC-1 — Black Ice Custom Engine
 
-This development branch contains the BC-1 Android editor under [BC-1/](BC-1/README.md). Current work: v1.0 release candidate, continuing the tested v0.5 Motion & Layers engine. See [the development checkpoint](NIGHT-WORK.md) for build and QA status.
+This development branch contains the BC-1 Android editor under [BC-1/](BC-1/README.md). Current work: verified v1.0.1 V1 interface polish on `bc-1-v1.0.1-ui`, continuing the existing Motion & Layers engine. See [the development checkpoint](NIGHT-WORK.md) for build and QA status.
 
 **APK downloads:** [uran39281-bit/bc-1](https://github.com/uran39281-bit/bc-1). Earlier source branches and APKs remain preserved.
 

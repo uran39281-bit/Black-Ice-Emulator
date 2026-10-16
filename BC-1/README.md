@@ -1,3 +1,13 @@
+## BC-1 v1.0.1 — V1 interface polish
+
+Monoline navigation/tool icons, nine editing shortcuts, seekable preview scrubber, pinned timeline labels and desktop Undo/Redo/Save bring the editor closer to the recovered [official V1 references](design/V1-REFERENCE.md). Compact-wide preview space is preserved.
+
+VersionName `1.0.1`, versionCode `13`: 30 unit +17 Android tests passed, lint0errors28warnings, independently decoded 1080p H.264/AAC export. Phone/wide/compact-wide screenshots reviewed. [Download APK](https://raw.githubusercontent.com/uran39281-bit/bc-1/main/v1.0.1/BC-1-v1.0.1.apk) · [QA and limitations](../BC-1-v1.0.1-QA.md). Previous versions remain available. Physical Snapdragon/DeX testing remains outstanding.
+
+Earlier release notes follow for history.
+
+---
+
 ## BC-1 v1.0 — verified release
 
 Continues the v0.2 Dual Workspace project, retaining its V1 mountain mark, dark navy panels and icy-blue accents. Phone and tablet/DeX workspaces support automatic selection and manual overrides. UI Lock, thumbnail timelines and a desktop media browser are included alongside the v0.5 keyframes, easing curves, layered audio, chroma controls and project bundles. 3D Page Curl remains excluded.

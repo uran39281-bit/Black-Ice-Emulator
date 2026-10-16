@@ -1,64 +1,56 @@
-# Active follow-up: v1.0.1 V1 interface polish
-
-The latest development branch is now `bc-1-v1.0.1-ui`; v1.0 remains published and preserved. Read this branch for further work. This follow-up recovered the actual user-selected V1 reference images from saved files: `1000009084.png` (phone, 864×1536) and `1000009085.png` (desktop, 1536×864). They are now versioned under `BC-1/design/v1/`, with design notes. Earlier references below saying the images were unavailable describe the earlier v1.0 qualification, not current availability.
-
-Candidate v1.0.1 is versionCode 13, not yet published. It adds V1 monoline navigation/tool icons, nine editing shortcuts, a seekable preview scrubber, fixed timeline track labels, a taller desktop/phone timeline where space permits, desktop Undo/Redo/Save controls and darker panels. Compact-wide mode preserves its preview space. Keyboard shortcuts and the old controls remain accessible. The 30 unit tests pass locally; full Android build, UI screenshots, 17 instrumentation tests and independent MP4 decode must pass before publication. Check that new buttons fit and work and the compact wide preview remains usable. No additional effects or project schema changes. A follow-up fixes hardware-accelerated viewport handling: pinned track labels use the scroll position explicitly and redraw on horizontal/vertical scroll. The Android workspace test now zooms and scrolls before capturing the phone layout. Image clips explain why audio extraction is unavailable instead of silently ignoring the shortcut.
-
-Early v1.0.1 run `38868760540` passed both jobs. Its phone/wide/compact-wide screenshots were reviewed: actual preview pixels and navigation fit. Visual review caught the Chroma Key shortcut label wrapping and shifting its button through baseline alignment; the current source widens that control and disables baseline alignment. Run `38869191940` checks the pinned-gutter scroll fix; final verification must also include the label correction.
-
-Do not overwrite v1.0 APK. If verified, publish `v1.0.1/BC-1-v1.0.1.apk` with new checksum and QA in the separate APK repository, then update this checkpoint and the pointer on bc-1-v1.0. Retained signing certificate must match v1.0. The user's 04:30 report should lead with the latest verified APK.
-
----
-
 # BC-1 overnight development checkpoint
 
-Target report: 2026-10-16 04:30 America/Phoenix (11:30 UTC). User authorized continued development, testing and V1 interface improvements. Keep notifications quiet until delivery unless the user asks for status.
+## Latest work: v1.0.1 V1 interface polish
 
-## v1.0 is built, verified and published
+Continue branch `bc-1-v1.0.1-ui`. Tested code commit `27e09676cd88f875353dd5e86409dafd2d6f4d1c`; Actions run `38869704876`. This continues v0.2–v1.0; never restart or force-push older branches.
 
-- Source repo: uran39281-bit/Black-Ice-Emulator. Branch `bc-1-v1.0`.
-- Tested code commit: `1c60a8b3b1f963300d5b0f344ae95762133ac4e5`.
-- Actions run: `38866426755`. Build and GPU jobs succeeded.
-- 30 unit tests and 17 Android instrumentation tests passed. Lint: 0 errors / 27 warnings.
-- Independent ffmpeg decode passed. ffprobe confirms H.264 1920x1080 + AAC.
-- Actual paused-first-frame pixels verified BEFORE Play, initial playhead remains zero. Paused seek, phone/wide/compact-wide resize/recreation, UI Lock, proxy cancellation/cache reuse/edit invalidation checked. Phone and large-wide screenshots visually reviewed from the final run; compact-wide also passed the same pixel gate and was visually reviewed in RC2.
-- Artifact IDs: APK `12031287189`, build reports `12031402040`, GPU reports `12031777241`.
-- Signed APK: `/workspace/scratch/31791101a882/deliverables/BC-1-v1.0.apk`.
-- Manifest verified: `com.blackice.bc1.preview`, versionName `1.0.0`, versionCode `12`, label `BC-1 v1.0`, requires GLES3.
-- SHA256: `50ee96cd381abc3ce98e6cae27a822829327b814886233a24b533d530f0c2823`.
-- Retained signing certificate SHA256: `3c578586198b9ebadd9496d38e25851ec0e90d918684dc4994e03d1d7f29a29d`.
-- Separate APK repo: uran39281-bit/bc-1, main commit `b70fe8cfd697e5f71495105fc6a8994387d45689`.
-- Direct download: https://raw.githubusercontent.com/uran39281-bit/bc-1/main/v1.0/BC-1-v1.0.apk . Downloaded back and byte-compared successfully.
-- QA: https://github.com/uran39281-bit/bc-1/blob/main/v1.0/QA.md .
-- Persistently saved file identity: `libfile_d442c26d9b14819192adc6219ba405bd`; local identity metadata applied.
+Both jobs passed: 30 unit tests +17 Android tests, lint 0 errors /28 warnings. Independent ffmpeg decode and ffprobe H.264 1920×1080/AAC/duration check passed. Final paused-first-frame, phone9:16, wide16:9 and compact-wide screenshots visually reviewed; zoom/scroll pinned labels and corrected shortcut label confirmed. Artifact IDs: APK12032329690, build12032284915, GPU12032987524.
 
-## Further authorized work
+APK: https://raw.githubusercontent.com/uran39281-bit/bc-1/main/v1.0.1/BC-1-v1.0.1.apk
+QA: https://github.com/uran39281-bit/bc-1/blob/main/v1.0.1/QA.md
+SHA256: `5b01c353f54f60f89b2345f5d6b51245581abff427d043fae840ea800442b871`
+Manifest: `com.blackice.bc1.preview`, versionName `1.0.1`, versionCode `13`, GLES3 required.
+Signing certificate SHA256: `3c578586198b9ebadd9496d38e25851ec0e90d918684dc4994e03d1d7f29a29d`.
+Local signed APK: /workspace/scratch/31791101a882/deliverables/BC-1-v1.0.1.apk.
+Published in APK repo commit `5dc96c3c5e8d7ad93bda443986e001e12aaf1ec6`; raw download was byte-compared to the signed file. Persistently saved identity: `libfile_a99729c13ae88191a027ed9c611c18b1`.
 
-The user requested work until 04:30. Hourly development checkpoints are scheduled at 00:30/01:30/02:30/03:30 America/Phoenix and a final report at 04:30. Continue only useful concrete review/improvements; do not repeatedly rerun already-passed gates without a specific risk. Preserve this tested download. Any further changed APK must use a NEW version/file/folder (for example 1.0.1, versionCode >12), with a separate branch and new verification. Never overwrite the v1.0 binary or force-push historical branches.
+## Official V1 references recovered
 
-At delivery, lead with the direct GitHub APK link, latest verified version and concise test status. ChatGPT file downloads previously failed for the user with a cross-site file URL error. Be honest about limits and do not promise physical-device testing.
+The actual user-selected reference images are now committed:
+- `BC-1/design/v1/phone.png` (original 1000009084.png, 864×1536).
+- `BC-1/design/v1/desktop.png` (original 1000009085.png, 1536×864).
+- `BC-1/design/V1-REFERENCE.md` records direction and remaining differences.
 
-## Design and architecture contract
+Earlier v1.0 notes saying references were unavailable describe that older qualification only. Preserve the mountain mark, dark navy/black, icy cyan, monoline controls, large preview, thumbnail timeline, pinned track labels, phone bottom navigation and wide media/inspector panels. User-selectable Auto/Phone/Wide and UI Lock remain. No fake controls/taskbars; no 3D Page Curl.
 
-Continue the v0.2 Dual Workspace foundation. V1 direction: mountain mark, dark navy/black backgrounds, icy-blue highlights, large preview/transport, multilayer thumbnail timeline, UI Lock, desktop media/effects/properties panels. Phone 9:16, tablet/DeX 16:9; Auto/Phone/Wide preference persists. Original full V1 reference image is unavailable, so no pixel-perfect claim. Do not substitute the unrelated legacy emulator cube logo. No 3D Page Curl.
+v1.0.1 adds monoline icons, nine functional editing shortcuts, preview scrubber, pinned timeline gutter, larger timeline where space permits and desktop Undo/Redo/Save. Tests now zoom/scroll the phone timeline and guard shortcuts with UI Lock. Visual review caught/fixed a wrapped Chroma Key label and hardware-accelerated gutter scrolling. No project schema or effects changes.
 
-Portable EditProject/Motion model and GLES3 effects remain the backend boundary for future RTX integration. No RTX backend exists yet. No physical Snapdragon 8 Gen 3/DeX, thermal or battery measurements have been made.
+## Next useful work
 
-Image/multilayer timelines use PreviewProxy: a cancellable, cached H.264/AAC preview rendered through the SAME GLES effects graph as export at the selected preview quality. ExoPlayer displays it paused and supports reliable seek/resizing. Single-video projects retain direct CompositionPlayer. Preparation costs time/storage on long timelines; do not claim instant real-time multilayer rendering. Cache keys ignore playhead changes; edits invalidate cache. Bump the preview cache revision if future renderer changes alter output for an unchanged project.
+User authorized ongoing improvements until 2026-10-16 04:30 America/Phoenix (11:30 UTC); suppress notifications until then. Deliver the latest VERIFIED direct GitHub APK link at that time, with concise test results and physical-device limits. ChatGPT file links previously failed with a cross-site URL error.
 
-## History and regressions fixed
+Remaining V1 differences are the dedicated project-flow screen, category-specific inspector, and denser two-column desktop media browser. Prefer a small complete, tested improvement next. Inspect the existing code and actual references before editing. Do not merely bump the version. Any new APK must increment versionCode above 13 and use a new versioned directory/file (for example v1.0.2), a new development branch, and full verification. Preserve this tested download. Read fresh branch heads before guarded GitHub ref updates. Update this checkpoint AND the pointer on `bc-1-v1.0` so later runs find the latest branch.
 
-- v0.5 tested commit `559cc1202d551cd0fb389e1037716d104c588cef`, run `38863083635`: 29 unit +16 Android tests. Includes keyframes/easing, layers, chroma, audio fades/waveforms, project bundles and DeX controls.
-- v0.5 fallback: https://raw.githubusercontent.com/uran39281-bit/bc-1/main/v0.5/BC-1-v0.5-Preview.apk . SHA256 `4420b3b81efa5137de90af81bb70237b0cfab55170fce8b98cfb696b2c72729d`.
-- v0.4 also preserved under v0.4/. Historical v0.2–v0.5 source branches remain intact.
-- RC1 passed 46 automated tests but visual review found black initial preview and playhead advancement from the warmup workaround. It was NOT published.
-- RC2 fixed actual paused/seek preview using cached GLES composition. Its workspace test passed and screenshots showed real frames at time zero. One new test fixture lacked a clip name, so the run failed; the fixture was corrected for the fully passing final run. RC2 was NOT published.
-- v1.0 additionally culls offscreen thumbnail/waveform work, reuses drawing rectangles, guards stale player callbacks, clamps playhead position, adds UI Lock, desktop media browser, thumbnail cache and audio-only placement metadata.
+## Architecture and limits
 
-## Build and signing
+Portable EditProject/Motion models and GLES3 effects form the boundary for future RTX integration. No RTX backend exists. No physical Snapdragon 8 Gen 3, Samsung DeX, thermal or battery measurements have been made. API35/SwiftShader emulator tests are not hardware performance measurements. Published APKs are development-signed debug builds; do not call them production-stable.
 
-Use .github/workflows/bc-1-android.yml for authoritative builds/API35 SwiftShader tests. Local SDK/Gradle distributions are unavailable; cached Java dependencies can compile models/UI. Do not retry the earlier auto-review-denied Gradle distribution download; GitHub CI is the supported path.
+Image/multilayer timelines use PreviewProxy: cancellable cached H.264/AAC rendered through the SAME GLES graph as export at selected preview height. ExoPlayer displays paused frames with reliable seeks/resizing. Single-video projects retain direct CompositionPlayer. Preparation costs time/storage on long timelines. Cache key ignores playhead; edits invalidate it. Bump preview cache revision if renderer output changes for an unchanged project.
 
-Retained private preview key: /root/.android/debug.keystore. NEVER commit, upload or print the key. Sign with existing /tmp/SignBcApk.java/class plus cached apksig 8.10.1, then verify the certificate above. If the key is unavailable, report the update-signing limit honestly and preserve existing APKs.
+## Verification and build workflow
 
-Local QA: /workspace/scratch/31791101a882/qa/v10-final/. Save future APKs in versioned paths in the separate APK repo with checksum/QA, verify raw downloaded bytes, and save the user-facing file persistently when supported. Source is Git-backed and needs no duplicate file storage.
+Use `.github/workflows/bc-1-android.yml` and `.github/scripts/bc1-device-checks.sh`: build/lint/30 unit tests, 17 Android tests, screenshots, independent ffmpeg decode + ffprobe H.264 1920×1080/AAC/duration check. Build and GPU jobs both must pass. Review actual paused first-frame, phone, wide and compact-wide screenshots, not just test totals.
+
+Local SDK/Gradle distributions unavailable. Do not retry earlier auto-review-denied Gradle download; use GitHub CI. Cached Java dependencies can compile UI/model code but do not replace Android tests.
+
+Retained private preview key: /root/.android/debug.keystore. NEVER print/upload/commit it. Sign with existing /tmp/SignBcApk.java/class and cached apksig 8.10.1; verify certificate above. If key unavailable, report the signing limitation and preserve old APKs.
+
+Local QA: /workspace/scratch/31791101a882/qa/v101-final/.
+Separate APK repository: uran39281-bit/bc-1, main. Publish versioned APK, checksum and QA; verify raw downloaded bytes. Save the user-facing APK persistently when available; Git-backed source needs no duplicate file storage.
+
+## Preserved history
+
+- v1.0 source `1c60a8b3b1f963300d5b0f344ae95762133ac4e5`, run `38866426755`: 30 unit +17 Android tests passed, independent MP4 decode passed, lint0errors27warnings. Initial paused preview and proxy cancellation/cache checks fixed. Download https://raw.githubusercontent.com/uran39281-bit/bc-1/main/v1.0/BC-1-v1.0.apk ; SHA256 `50ee96cd381abc3ce98e6cae27a822829327b814886233a24b533d530f0c2823`.
+- v0.5 source `559cc1202d551cd0fb389e1037716d104c588cef`, run `38863083635`:29 unit +16 Android tests. Keyframes/easing, layers, chroma, audio fades/waveforms, project bundles and DeX controls. Download https://raw.githubusercontent.com/uran39281-bit/bc-1/main/v0.5/BC-1-v0.5-Preview.apk ; SHA256 `4420b3b81efa5137de90af81bb70237b0cfab55170fce8b98cfb696b2c72729d`.
+- v0.4 APK and v0.2–v0.5 source branches preserved.
+- v1.0 RC1 passed tests but black initial preview failed visual review; not published. RC2 fixed pixels but one fixture failed; final v1.0 corrected it and passed.
