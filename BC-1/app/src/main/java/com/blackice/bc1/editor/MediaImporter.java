@@ -15,7 +15,8 @@ import java.util.UUID;
 public final class MediaImporter {
     private final Context context;
     public MediaImporter(Context context) {this.context=context.getApplicationContext();}
-    public EditProject.Clip importClip(Uri uri,boolean audioOnly) throws IOException {
+    public EditProject.Clip importClip(Uri uri,boolean audioOnly) throws IOException { return importClip(uri,audioOnly,2048); }
+    public EditProject.Clip importClip(Uri uri,boolean audioOnly,int maxDimension) throws IOException {
         String name="Imported media";
         try(android.database.Cursor c=context.getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)) {
             if(c!=null && c.moveToFirst()) name=c.getString(0);
@@ -41,12 +42,12 @@ public final class MediaImporter {
                 Bitmap bitmap;
                 if(Build.VERSION.SDK_INT>=28) bitmap=ImageDecoder.decodeBitmap(ImageDecoder.createSource(copy),(decoder,info,source)->{
                     int w=info.getSize().getWidth(),h=info.getSize().getHeight();
-                    float scale=Math.min(1f,2048f/Math.max(w,h));decoder.setTargetSize(Math.max(1,Math.round(w*scale)),Math.max(1,Math.round(h*scale)));
+                    float scale=Math.min(1f,(float)maxDimension/Math.max(w,h));decoder.setTargetSize(Math.max(1,Math.round(w*scale)),Math.max(1,Math.round(h*scale)));
                     decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
                 });
                 else {
                     BitmapFactory.Options options=new BitmapFactory.Options();options.inJustDecodeBounds=true;BitmapFactory.decodeFile(copy.getPath(),options);
-                    options.inSampleSize=1;while(Math.max(options.outWidth,options.outHeight)/options.inSampleSize>2048)options.inSampleSize*=2;
+                    options.inSampleSize=1;while(Math.max(options.outWidth,options.outHeight)/options.inSampleSize>maxDimension)options.inSampleSize*=2;
                     options.inJustDecodeBounds=false;bitmap=BitmapFactory.decodeFile(copy.getPath(),options);
                     if(bitmap!=null) {
                         ExifInterface exif=new ExifInterface(copy.getPath());int orientation=exif.getAttributeInt(ExifInterface.TAG_ORIENTATION,1);

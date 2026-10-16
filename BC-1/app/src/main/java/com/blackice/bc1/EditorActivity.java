@@ -281,7 +281,7 @@ public final class EditorActivity extends Activity {
         if(uris.isEmpty())return;importing=true;tell("Importing media copies…");
         io.execute(()->{
             java.util.List<EditProject.Clip> imported=new ArrayList<>();java.util.List<String> errors=new ArrayList<>();
-            for(Uri uri:uris)try{imported.add(new MediaImporter(this).importClip(uri,request==MUSIC));}catch(Exception e){errors.add(e.getMessage());}
+            for(Uri uri:uris)try{imported.add(new MediaImporter(this).importClip(uri,request==MUSIC,request==OVERLAY?1024:2048));}catch(Exception e){errors.add(e.getMessage());}
             main.post(()->{importing=false;if(isDestroyed())return;remember();
                 for(EditProject.Clip c:imported){
                     if(request==MUSIC){EditProject.Music m=new EditProject.Music();m.uri=c.uri;m.name=c.name;m.sourceDurationMs=c.sourceDurationMs;m.outMs=c.outMs;project.music=m;tab=3;}
@@ -312,12 +312,13 @@ public final class EditorActivity extends Activity {
         private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
         private float downX;private boolean dragging;
         TimelineCanvas(){super(EditorActivity.this);setContentDescription("Timeline: tap a clip to select and seek; drag across the ruler to scrub. Horizontal scroll and plus/minus zoom.");setFocusable(true);}
-        private float x(long ms){return dp(12)+ms/1000f*dp(pixelsPerSecond);}
+        private float timelineScale(){return Math.min(dp(pixelsPerSecond),dp(30000)/Math.max(1f,project.durationMs()/1000f));}
+        private float x(long ms){return dp(12)+ms/1000f*timelineScale();}
         @Override protected void onMeasure(int w,int h){setMeasuredDimension(Math.max(dp(280),Math.min(dp(30000),(int)x(project.durationMs())+dp(30))),View.MeasureSpec.getSize(h));}
         @Override protected void onDraw(Canvas canvas){
             canvas.drawColor(PANEL);int height=getHeight();float mainY=dp(35),clipH=dp(42);
             paint.setTextSize(dp(10));paint.setTypeface(Typeface.DEFAULT);paint.setColor(MUTED);
-            long interval=pixelsPerSecond<20?10_000:pixelsPerSecond<60?5000:1000;
+            long interval=1000;while(interval/1000f*timelineScale()<dp(55))interval*=2;
             for(long ms=0;ms<=project.durationMs();ms+=interval){float xx=x(ms);canvas.drawText(seconds(ms)+"s",xx,dp(16),paint);canvas.drawLine(xx,dp(21),xx,height,paint);}
             java.util.List<EditProject.Placement> placements=project.placements();
             for(EditProject.Placement p:placements){float left=x(p.startMs),right=x(p.endMs);paint.setColor(p.index==selected?0xFF226D99:0xFF204057);canvas.drawRoundRect(left,mainY,right,mainY+clipH,dp(5),dp(5),paint);
@@ -336,8 +337,8 @@ public final class EditorActivity extends Activity {
         }
         @Override public boolean onTouchEvent(android.view.MotionEvent event){
             if(event.getAction()==MotionEvent.ACTION_DOWN){downX=event.getX();dragging=event.getY()<dp(32);if(dragging)getParent().requestDisallowInterceptTouchEvent(true);return true;}
-            if(event.getAction()==MotionEvent.ACTION_MOVE&&dragging){long target=(long)((event.getX()-dp(12))/dp(pixelsPerSecond)*1000);seek(snapping?project.snap(target,(long)(8000/pixelsPerSecond)):target);return true;}
-            if(event.getAction()==MotionEvent.ACTION_UP){long target=(long)((event.getX()-dp(12))/dp(pixelsPerSecond)*1000);
+            if(event.getAction()==MotionEvent.ACTION_MOVE&&dragging){long target=(long)((event.getX()-dp(12))/timelineScale()*1000);seek(snapping?project.snap(target,(long)(8000/pixelsPerSecond)):target);return true;}
+            if(event.getAction()==MotionEvent.ACTION_UP){long target=(long)((event.getX()-dp(12))/timelineScale()*1000);
                 if(Math.abs(event.getX()-downX)<dp(10)||dragging){
                     if(!dragging&&event.getY()>=dp(35)&&event.getY()<dp(78)){java.util.List<EditProject.Placement> placements=project.placements();for(int i=placements.size()-1;i>=0;i--){EditProject.Placement p=placements.get(i);if(target>=p.startMs&&target<p.endMs){selected=i;break;}}renderInspector();}
                     seek(snapping?project.snap(target,(long)(8000/pixelsPerSecond)):target);performClick();}

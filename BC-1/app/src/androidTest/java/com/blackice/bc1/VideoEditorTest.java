@@ -50,6 +50,40 @@ public class VideoEditorTest {
         if(!done.await(180,TimeUnit.SECONDS)){inst.runOnMainSync(()->{if(running.get()!=null)running.get().cancel();});fail("Export timed out");}
         if(error.get()!=null)throw new AssertionError("Export failed",error.get());assertTrue(file.length()>1000);return file;
     }
+    private File serviceExport(EditProject project,boolean cancel) throws Exception {
+        File snapshot=new File(context.getCacheDir(),"export-test-project.json");
+        try(OutputStream out=new FileOutputStream(snapshot)){out.write(ProjectStore.encode(project).getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+        File destination=new File(context.getCacheDir(),"published-"+System.nanoTime()+".mp4");
+        android.content.SharedPreferences prefs=context.getSharedPreferences(ExportService.PREFS,0);prefs.edit().clear().commit();
+        context.getSharedPreferences("EditorActivity",0).edit().remove("last-project").commit();
+        try(ActivityScenario<EditorActivity> scenario=ActivityScenario.launch(EditorActivity.class)) {
+            scenario.onActivity(a->a.startForegroundService(new android.content.Intent(a,ExportService.class).putExtra("project",snapshot.getPath()).putExtra("destination",Uri.fromFile(destination).toString())));
+            long deadline=System.currentTimeMillis()+180000;
+            while(!prefs.contains("status")&&System.currentTimeMillis()<deadline)Thread.sleep(50);
+            if(cancel)scenario.onActivity(a->a.startService(new android.content.Intent(a,ExportService.class).setAction(ExportService.ACTION_CANCEL)));
+            while(prefs.getBoolean("running",false)&&System.currentTimeMillis()<deadline)Thread.sleep(100);
+            assertFalse("Export service timed out",prefs.getBoolean("running",false));
+            if(cancel){assertEquals("Export cancelled",prefs.getString("status",""));assertFalse(prefs.getBoolean("success",false));}
+            else {assertTrue(prefs.getString("status","Export did not start"),prefs.getBoolean("success",false));assertTrue(destination.length()>1000);}
+        }
+        return destination;
+    }
+    @Test public void foregroundExportCanBeCancelledWithoutPublishing() throws Exception {
+        File file=serviceExport(project(0),true);assertFalse(file.exists());
+    }
+    @Test public void videoEffectsAndTimedImageOverlayReachTheExport() throws Exception {
+        EditProject p=project(-1);p.clips.get(0).effect=4;p.clips.get(0).intensity=1;p.clips.get(1).opacity=0;
+        File image=new File(context.getFilesDir(),"overlay-green.png");Bitmap bitmap=Bitmap.createBitmap(32,32,Bitmap.Config.ARGB_8888);bitmap.eraseColor(Color.GREEN);
+        try(OutputStream out=new FileOutputStream(image)){bitmap.compress(Bitmap.CompressFormat.PNG,100,out);}bitmap.recycle();
+        EditProject.Overlay overlay=new EditProject.Overlay();overlay.imageUri=Uri.fromFile(image).toString();overlay.startMs=900;overlay.endMs=1500;overlay.x=0;overlay.y=0;p.overlays.add(overlay);
+        File file=export(p,180);
+        try(MediaMetadataRetriever r=new MediaMetadataRetriever()) {
+            r.setDataSource(file.getPath());int gray=pixel(r,500),green=pixel(r,1200),black=pixel(r,3000);
+            assertTrue(Math.abs(Color.red(gray)-Color.blue(gray))<8&&Color.red(gray)>20);
+            assertTrue("Timed image overlay",Color.green(green)>200&&Color.red(green)<40);
+            assertTrue("Independent clip opacity",Color.red(black)<10&&Color.blue(black)<10);
+        }finally{file.delete();}
+    }
     private int pixel(MediaMetadataRetriever retriever,long ms) {
         Bitmap frame=retriever.getFrameAtTime(ms*1000,MediaMetadataRetriever.OPTION_CLOSEST);assertNotNull(frame);
         int color=frame.getPixel(frame.getWidth()/2,frame.getHeight()/2);frame.recycle();return color;
@@ -73,7 +107,7 @@ public class VideoEditorTest {
         EditProject.Music music=new EditProject.Music();music.uri=fixture("music.wav");music.name="test music";music.sourceDurationMs=1000;music.outMs=1000;music.startMs=500;p.music=music;
         ProjectStore store=new ProjectStore(context);store.save(p);EditProject restored=store.load(p.id);
         assertEquals(ProjectStore.encode(p),ProjectStore.encode(restored));assertEquals(3,restored.clips.size());
-        File file=export(restored,1080);
+        File file=serviceExport(restored,false);
         try(MediaMetadataRetriever r=new MediaMetadataRetriever()) {
             r.setDataSource(file.getPath());assertEquals("1920",r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH));assertEquals("1080",r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT));
             assertEquals("yes",r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO));assertTrue(Color.blue(pixel(r,3000))>200);
@@ -86,6 +120,7 @@ public class VideoEditorTest {
     }
     @Test public void previewSeeksAfterTrimAcrossBothTracks() throws Exception {
         EditProject p=project(0);CountDownLatch ready=new CountDownLatch(1);AtomicReference<PlaybackException> error=new AtomicReference<>();AtomicReference<CompositionPlayer> ref=new AtomicReference<>();
+        context.getSharedPreferences("EditorActivity",0).edit().remove("last-project").commit();
         try(ActivityScenario<EditorActivity> scenario=ActivityScenario.launch(EditorActivity.class)) {
             scenario.onActivity(activity->{
                 SurfaceView view=new SurfaceView(activity);activity.setContentView(view);
