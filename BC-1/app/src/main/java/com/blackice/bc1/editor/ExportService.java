@@ -52,7 +52,7 @@ public final class ExportService extends Service {
             EditProject project=ProjectStore.decode(new String(java.nio.file.Files.readAllBytes(new File(path).toPath()),StandardCharsets.UTF_8));
             new File(path).delete();
             output=new File(getCacheDir(),"bc1-export-"+System.currentTimeMillis()+".mp4");
-            transformer=new Transformer.Builder(this).setVideoMimeType(MimeTypes.VIDEO_H264).setAudioMimeType(MimeTypes.AUDIO_AAC)
+            transformer=new Transformer.Builder(this).setAssetLoaderFactory(CompositionFactory.assetLoader(this)).setVideoMimeType(MimeTypes.VIDEO_H264).setAudioMimeType(MimeTypes.AUDIO_AAC)
                     .setPortraitEncodingEnabled(true)
                     .setVideoFrameProcessorFactory(CompositionFactory.frameProcessor())
                     .setEncoderFactory(new DefaultEncoderFactory.Builder(this).setEnableFallback(false)
@@ -98,7 +98,7 @@ public final class ExportService extends Service {
             getSystemService(NotificationManager.class).notify(41,notification(message,percent));
     }
     private Notification notification(String message,int percent) {
-        Intent open=new Intent(this,EditorActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        Intent open=new Intent(this,EditorActivity.class).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent content=PendingIntent.getActivity(this,0,open,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         PendingIntent cancel=PendingIntent.getService(this,1,new Intent(this,ExportService.class).setAction(ACTION_CANCEL),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         return new Notification.Builder(this,"bc1-export").setSmallIcon(R.drawable.ic_black_ice).setContentTitle("Black Ice • Export")

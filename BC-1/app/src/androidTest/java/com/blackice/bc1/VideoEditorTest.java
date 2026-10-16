@@ -40,7 +40,7 @@ public class VideoEditorTest {
     private File export(EditProject project,int height) throws Exception {
         File file=new File(context.getCacheDir(),"qa-"+System.nanoTime()+".mp4");CountDownLatch done=new CountDownLatch(1);AtomicReference<Throwable> error=new AtomicReference<>();AtomicReference<Transformer> running=new AtomicReference<>();
         inst.runOnMainSync(()->{try{
-            Transformer transformer=new Transformer.Builder(context).setVideoMimeType(MimeTypes.VIDEO_H264).setAudioMimeType(MimeTypes.AUDIO_AAC)
+            Transformer transformer=new Transformer.Builder(context).setAssetLoaderFactory(CompositionFactory.assetLoader(context)).setVideoMimeType(MimeTypes.VIDEO_H264).setAudioMimeType(MimeTypes.AUDIO_AAC)
                     .setPortraitEncodingEnabled(true).setVideoFrameProcessorFactory(CompositionFactory.frameProcessor())
                     .addListener(new Transformer.Listener(){
                         @Override public void onCompleted(Composition c,ExportResult r){done.countDown();}
@@ -48,7 +48,7 @@ public class VideoEditorTest {
                     }).build();running.set(transformer);transformer.start(CompositionFactory.buildAtHeight(context,project,height),file.getPath());
         }catch(Exception e){error.set(e);done.countDown();}});
         if(!done.await(180,TimeUnit.SECONDS)){inst.runOnMainSync(()->{if(running.get()!=null)running.get().cancel();});fail("Export timed out");}
-        if(error.get()!=null)throw new AssertionError("Export failed",error.get());assertTrue(file.length()>1000);return file;
+        if(error.get()!=null)throw new AssertionError("Export failed for transition "+project.clips.get(0).transition,error.get());assertTrue(file.length()>1000);return file;
     }
     private File serviceExport(EditProject project,boolean cancel) throws Exception {
         File snapshot=new File(context.getCacheDir(),"export-test-project.json");

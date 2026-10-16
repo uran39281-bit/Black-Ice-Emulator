@@ -20,6 +20,21 @@ public final class CompositionFactory {
                 .setGlObjectsProvider(new Gles3Provider())
                 .setSdrWorkingColorSpace(DefaultVideoFrameProcessor.WORKING_COLOR_SPACE_ORIGINAL).build();
     }
+    /** Goldfish's host decoder lost buffer-pool handles during repeated CI exports.
+     * Prefer Android software decoders on emulators only; physical devices keep hardware ordering. */
+    public static AssetLoader.Factory assetLoader(Context context) {
+        DefaultDecoderFactory.Builder decoder=new DefaultDecoderFactory.Builder(context).setEnableDecoderFallback(true);
+        if(android.os.Build.HARDWARE.contains("ranchu")||android.os.Build.HARDWARE.contains("goldfish")) {
+            decoder.setMediaCodecSelector((mime,secure,tunneling)->{
+                List<androidx.media3.exoplayer.mediacodec.MediaCodecInfo> codecs=
+                        androidx.media3.exoplayer.mediacodec.MediaCodecSelector.DEFAULT.getDecoderInfos(mime,secure,tunneling);
+                List<androidx.media3.exoplayer.mediacodec.MediaCodecInfo> compatible=new ArrayList<>();
+                for(androidx.media3.exoplayer.mediacodec.MediaCodecInfo codec:codecs)if(!codec.name.contains("goldfish"))compatible.add(codec);
+                return compatible.isEmpty()?codecs:compatible;
+            });
+        }
+        return new DefaultAssetLoaderFactory(context,decoder.build(),androidx.media3.common.util.Clock.DEFAULT,null);
+    }
     public static Composition build(Context context,EditProject project,boolean export) {
         return buildAtHeight(context,project,export?1080:project.previewHeight);
     }
