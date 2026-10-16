@@ -1,5 +1,9 @@
 # BC-1 overnight development checkpoint
 
+## Active follow-up: thumbnail stress regression
+
+Continue `bc-1-v1.0.3-thumbnails`. A new Android test deliberately blocks the thumbnail worker, changes search 32 times, then checks that the CURRENT card receives decoded pixels. The initial test-only commit intentionally exercises the v1.0.2 callback implementation to reproduce the suspected stale-placeholder issue. Do not publish this build; v1.0.2 remains the verified download. If reproduced, use stable activity-level observers for current browser/timeline views, retaining bounded caching and background decoding, then rerun all checks and review screenshots. Only a verified new binary may be published as v1.0.3/code15; the baseline still has the old manifest version.
+
 ## Latest verified work: v1.0.2 V1 media browser
 
 Continue `bc-1-v1.0.2-media`. Tested source `5e551384278f03270258ff7149c4f36a3fe0d1ce`, Actions run `38871745189`: both jobs succeeded. 33 unit +17 Android tests passed, lint 0 errors /30 warnings. Independent ffmpeg decode and ffprobe H.264 1920×1080/AAC/duration gate passed. Final phone, wide, filtered-wide and compact-wide screenshots visually reviewed.

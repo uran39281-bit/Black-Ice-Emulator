@@ -38,6 +38,48 @@ public class EditorWorkspaceTest {
         }
         fail("Preview must render real image pixels without pressing Play");
     }
+    @Test public void rapidSearchDuringDecodeUpdatesCurrentThumbnail()throws Exception{
+        assumeTrue(Build.HARDWARE.contains("ranchu")||Build.HARDWARE.contains("goldfish"));
+        String size=override(shell("wm size")),density=override(shell("wm density"));
+        java.util.concurrent.CountDownLatch decodeAllowed=new java.util.concurrent.CountDownLatch(1),workerBlocked=new java.util.concurrent.CountDownLatch(1);
+        EditProject project=new EditProject();project.name="Thumbnail stress";
+        File source=new File(inst.getTargetContext().getFilesDir(),"thumbnail-stress.png");
+        Bitmap sourcePixels=Bitmap.createBitmap(160,90,Bitmap.Config.ARGB_8888);sourcePixels.eraseColor(android.graphics.Color.rgb(24,120,210));
+        try(OutputStream out=new FileOutputStream(source)){sourcePixels.compress(Bitmap.CompressFormat.PNG,100,out);}sourcePixels.recycle();
+        for(String name:new String[]{"ICE / A","ICE / B"}){EditProject.Clip clip=new EditProject.Clip();clip.name=name;clip.uri=android.net.Uri.fromFile(source).toString();clip.image=true;clip.sourceDurationMs=2000;clip.outMs=2000;project.clips.add(clip);}
+        new ProjectStore(inst.getTargetContext()).save(project);
+        inst.getTargetContext().getSharedPreferences(EditorActivity.PREFS,0).edit().putString("last-project",project.id).putString("mode","WIDE").putBoolean("ui-locked",false).commit();
+        java.util.concurrent.atomic.AtomicReference<ThumbnailCache> cache=new java.util.concurrent.atomic.AtomicReference<>();
+        try{
+            shell("wm size 1920x1080");shell("wm density 160");
+            try(ActivityScenario<EditorActivity> scenario=ActivityScenario.launch(EditorActivity.class)){
+                long deadline=SystemClock.elapsedRealtime()+15000;java.util.concurrent.atomic.AtomicBoolean loaded=new java.util.concurrent.atomic.AtomicBoolean();
+                while(SystemClock.elapsedRealtime()<deadline&&!loaded.get()){scenario.onActivity(a->loaded.set(described(a.getWindow().getDecorView(),"Select ICE / B")!=null));if(!loaded.get())Thread.sleep(100);}
+                assertTrue("Stress fixture loaded",loaded.get());
+                scenario.onActivity(a->{try{
+                    java.lang.reflect.Field field=EditorActivity.class.getDeclaredField("thumbnails");field.setAccessible(true);((ThumbnailCache)field.get(a)).close();
+                    ThumbnailCache fresh=new ThumbnailCache(a);cache.set(fresh);field.set(a,fresh);
+                    java.lang.reflect.Field executor=ThumbnailCache.class.getDeclaredField("worker");executor.setAccessible(true);
+                    ((java.util.concurrent.ExecutorService)executor.get(fresh)).execute(()->{workerBlocked.countDown();try{decodeAllowed.await();}catch(InterruptedException e){Thread.currentThread().interrupt();}});
+                }catch(ReflectiveOperationException e){throw new AssertionError(e);}});
+                assertTrue("Decoder barrier entered",workerBlocked.await(5,java.util.concurrent.TimeUnit.SECONDS));
+                scenario.onActivity(a->{try{
+                    java.lang.reflect.Method render=EditorActivity.class.getDeclaredMethod("renderMediaBrowser");render.setAccessible(true);render.invoke(a);
+                    android.widget.EditText search=(android.widget.EditText)described(a.getWindow().getDecorView(),"Search project media");
+                    for(int i=0;i<32;i++)search.setText(i%2==0?"ICE":"ICE / B");
+                    ViewGroup card=(ViewGroup)described(a.getWindow().getDecorView(),"Select ICE / B");
+                    assertFalse("Current card starts with a placeholder",((android.widget.ImageView)card.getChildAt(0)).getDrawable() instanceof android.graphics.drawable.BitmapDrawable);
+                }catch(ReflectiveOperationException e){throw new AssertionError(e);}});
+                decodeAllowed.countDown();deadline=SystemClock.elapsedRealtime()+15000;
+                while(cache.get().peek(project.clips.get(1))==null&&SystemClock.elapsedRealtime()<deadline)Thread.sleep(100);
+                assertNotNull("Decode actually completed",cache.get().peek(project.clips.get(1)));inst.waitForIdleSync();
+                scenario.onActivity(a->{View root=a.getWindow().getDecorView();ViewGroup card=(ViewGroup)described(root,"Select ICE / B");android.graphics.drawable.Drawable drawable=((android.widget.ImageView)card.getChildAt(0)).getDrawable();
+                    assertTrue("Latest media card receives decoded pixels after rapid search",drawable instanceof android.graphics.drawable.BitmapDrawable);
+                    Bitmap pixels=((android.graphics.drawable.BitmapDrawable)drawable).getBitmap();assertEquals(android.graphics.Color.rgb(24,120,210),pixels.getPixel(pixels.getWidth()/2,pixels.getHeight()/2));assertNotNull(text(root,"1 / 2 clips"));
+                });capture("v103-thumbnails-loaded");
+            }
+        }finally{decodeAllowed.countDown();shell("wm size "+size);shell("wm density "+density);inst.getTargetContext().getSharedPreferences(EditorActivity.PREFS,0).edit().putString("mode","AUTO").commit();}
+    }
     @Test public void editorAdaptsAndTabsKeepVideoSurface()throws Exception{
         assumeTrue(Build.HARDWARE.contains("ranchu")||Build.HARDWARE.contains("goldfish"));String size=override(shell("wm size")),density=override(shell("wm density"));
         EditProject p=new EditProject();p.name="Ice • First Cut";
