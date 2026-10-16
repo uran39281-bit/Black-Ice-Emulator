@@ -24,10 +24,10 @@ jobs:
           "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
       - name: Unit tests, lint, APK and GPU test APK
         working-directory: BC-1
-        run: gradle --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+        run: gradle --no-daemon -Pbc1SideBySide testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
       - uses: actions/upload-artifact@v4
         with:
-          name: BC-1-v0.3-debug-apk
+          name: BC-1-v0.3-preview-apk
           path: BC-1/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
       - uses: actions/upload-artifact@v4
@@ -59,10 +59,8 @@ jobs:
           target: google_apis
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: cd BC-1 && gradle --no-daemon connectedDebugAndroidTest
-      - name: Collect emulator screenshots
-        if: always()
-        run: adb pull /sdcard/Android/data/com.blackice.bc1/files/qa BC-1/app/build/reports/androidTests/screenshots || true
+          script: >-
+            cd BC-1 && (gradle --no-daemon -Pbc1SideBySide connectedDebugAndroidTest; result=$?; mkdir -p app/build/reports/androidTests/screenshots; adb pull /sdcard/Android/data/com.blackice.bc1.preview/files/qa/. app/build/reports/androidTests/screenshots || true; exit "$result")
       - uses: actions/upload-artifact@v4
         if: always()
         with:

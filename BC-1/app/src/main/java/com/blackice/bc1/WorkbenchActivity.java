@@ -193,7 +193,7 @@ public final class WorkbenchActivity extends Activity {
         tabButtons.clear();
         LinearLayout root = column();
         root.setBackgroundColor(BACKGROUND);
-        root.addView(topBar(), height(60));
+        root.addView(topBar(), height(next==LayoutPolicy.Workspace.WIDE && height<600?48:60));
         if (next == LayoutPolicy.Workspace.WIDE) buildWide(root, width);
         else buildPhone(root);
         root.setOnApplyWindowInsetsListener((v,insets)->{
@@ -233,7 +233,7 @@ public final class WorkbenchActivity extends Activity {
         LinearLayout content=column();
         content.setPadding(dp(10),dp(6),dp(10),dp(4));
         // On short landscape phone windows all content can scroll. Portrait pins the monitor.
-        boolean shortWindow=heightDp<540;
+        boolean shortWindow=heightDp<700;
         if(shortWindow) {
             ScrollView whole=scroll(); whole.addView(content);
             root.addView(whole,columnWeight(1));
@@ -277,6 +277,7 @@ public final class WorkbenchActivity extends Activity {
     }
 
     private void buildWide(LinearLayout root, int widthDp) {
+        boolean compact=getResources().getConfiguration().screenHeightDp<600;
         LinearLayout workspace = row();
         root.addView(workspace, columnWeight(1));
         LinearLayout rail = column();
@@ -315,9 +316,9 @@ public final class WorkbenchActivity extends Activity {
         library.addView(hint);
 
         LinearLayout center = column();
-        center.setPadding(dp(10),dp(8),dp(10),dp(8));
+        center.setPadding(dp(10),dp(compact?4:8),dp(10),dp(compact?4:8));
         workspace.addView(center,rowWeightFill(1));
-        center.addView(headerLine("PROGRAM MONITOR", "16:9"));
+        center.addView(compact?text("PROGRAM MONITOR  ·  16:9",10,TEXT,true):headerLine("PROGRAM MONITOR", "16:9"));
         FrameLayout previewHost = new FrameLayout(this);
         previewHost.setBackground(makeBackground(0xFF0A1523, 0xFF08121C, 12, 0xFF243E57));
         FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(-1,-1,Gravity.CENTER);
@@ -325,6 +326,8 @@ public final class WorkbenchActivity extends Activity {
         center.addView(previewHost,columnWeight(1));
         center.addView(transport());
         status=text(lastStatus,10,MUTED,false);
+        status.setSingleLine(true);
+        status.setEllipsize(android.text.TextUtils.TruncateAt.END);
         center.addView(status);
 
         ScrollView inspectorScroll=scroll();
@@ -342,8 +345,8 @@ public final class WorkbenchActivity extends Activity {
         LinearLayout bottom = column();
         bottom.setPadding(dp(10),dp(5),dp(10),dp(7));
         bottom.setBackgroundColor(0xFF101B2A);
-        root.addView(bottom,height(Math.max(124,Math.min(212,Math.round(getResources().getConfiguration().screenHeightDp*.25f)))));
-        bottom.addView(headerLine("DEMO TIMELINE  /  STILL A → STILL B", "SCRUB TO PREVIEW"));
+        root.addView(bottom,height(compact?100:Math.max(124,Math.min(212,Math.round(getResources().getConfiguration().screenHeightDp*.25f)))));
+        if(!compact) bottom.addView(headerLine("DEMO TIMELINE  /  STILL A → STILL B", "SCRUB TO PREVIEW"));
         timeline=new TimelineView(this);
         bottom.addView(timeline,columnWeight(1));
     }
@@ -373,7 +376,7 @@ public final class WorkbenchActivity extends Activity {
     private View transport() {
         LinearLayout strip = row();
         strip.setGravity(Gravity.CENTER_VERTICAL);
-        strip.setPadding(dp(5),dp(6),dp(5),dp(5));
+        strip.setPadding(dp(5),dp(2),dp(5),dp(2));
         progressText=text("00:00.0 / 00:03.5",11,MUTED,false);
         strip.addView(progressText);
         strip.addView(gapHorizontal(6));
@@ -390,7 +393,11 @@ public final class WorkbenchActivity extends Activity {
         });
         strip.addView(play);
         strip.addView(gapHorizontal(6));
-        strip.addView(action("↺",()->{playing=false;engine.progress=0f;updatePlayText();syncProgress();}));
+        TextView reset=text("↺",22,CYAN,true);
+        reset.setMinWidth(dp(48));reset.setMinHeight(dp(48));reset.setGravity(Gravity.CENTER);
+        reset.setContentDescription("Restart transition");reset.setFocusable(true);
+        reset.setOnClickListener(v->{playing=false;engine.progress=0f;updatePlayText();syncProgress();});
+        strip.addView(reset);
         return strip;
     }
 

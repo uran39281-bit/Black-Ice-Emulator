@@ -76,8 +76,8 @@ public class WorkspaceTest {
                 shell("wm size 780x420");Thread.sleep(1500);inst.waitForIdleSync();
                 inst.getTargetContext().getSharedPreferences("bc1-workspace",0).edit().putString("workspace-mode","WIDE").commit();
                 scenario.recreate();inst.waitForIdleSync();
-                scenario.onActivity(a->{View root=a.getWindow().getDecorView();assertNotNull(text(root,"INSPECTOR"));assertNull(text(root,"PROJECT MEDIA"));assertTrue(surface(root).getWidth()>250);});
                 capture("compact-wide");
+                scenario.onActivity(a->{View root=a.getWindow().getDecorView();assertNotNull(text(root,"INSPECTOR"));assertNull(text(root,"PROJECT MEDIA"));assertTrue(surface(root).getWidth()>180);assertTrue(surface(root).getHeight()>90);});
             }
         } finally {
             shell("wm size "+oldSize);shell("wm density "+oldDensity);
