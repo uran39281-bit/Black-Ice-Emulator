@@ -1,3 +1,7 @@
+# Active candidate: bc-1-v1.0.4-diagnostics
+
+Read NIGHT-WORK.md on `bc-1-v1.0.4-diagnostics`. Source `ae912eec2ca3a9d4a63212ae8646646bd30c24c5`, Actions `38888011311` pending. Adds copyable redacted export diagnostics under Setup, failure cleanup/recovery test and actual clipboard UI test;36 local unit tests pass. API35 CI must pass20 Android tests and FOUR independent exports (three sequential plus post-failure recovery). New versionCode16/name1.0.4; do not publish until all gates and UI screenshots pass. Latest published remainsv1.0.3 below. The investigation run38881066895 passed18 Android tests and all three MP4 checks; original intermittent muxer cause remains unknown, not declared fixed.
+
 # Continue bc-1-export-reliability; v1.0.3 is published
 
 Read `NIGHT-WORK.md` on `bc-1-export-reliability` (checkpoint `8885c700bff7aaa7df0a544ef99669b076c81186`). Investigation source `664e2f2fbe1a91bdf9f01f7767de34cbcf19ae38`, Actions run `38881066895`: debug-only full ExportException logging and three required consecutive 1080p exports, each independently decoded. CI pending. Manifest intentionally still1.0.3/code15; artifact DO-NOT-PUBLISH. Never overwrite the published APK with these changed diagnostic bytes. Inspect failures before a targeted fix; no skipped tests/retries hidden inside tests.
