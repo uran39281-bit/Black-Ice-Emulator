@@ -155,4 +155,8 @@ public class VideoEditorTest {
     @Test public void audioWaveformDecodesRealPeaks() throws Exception {
         String uri=fixture("music.wav");float[] peaks=AudioWaveform.read(context,uri,1000);float max=0;for(float peak:peaks)max=Math.max(max,peak);assertTrue(max>.03f&&max<=1);assertTrue(AudioWaveform.hasAudio(context,uri));
     }
+    @Test public void extractedAudioLayerOffsetsAndFadesInExport() throws Exception {
+        EditProject p=project(-1);p.clips.remove(1);p.clips.get(0).volume=0;EditProject.Clip audio=p.clips.get(0).copy();audio.track=4;audio.startMs=500;audio.outMs=1300;audio.volume=1;audio.fadeInMs=300;audio.fadeOutMs=300;p.clips.add(audio);
+        File file=export(p,180);float[] peaks=AudioWaveform.read(context,Uri.fromFile(file).toString(),2000);float middle=peaks[256],early=peaks[145],before=peaks[50],after=peaks[460];assertTrue("Independent audio begins after offset",before<.005f&&middle>.03f);assertTrue("Fade in attenuates the start",early<middle*.65f);assertTrue("Independent audio ends before base video",after<.005f);file.delete();
+    }
 }

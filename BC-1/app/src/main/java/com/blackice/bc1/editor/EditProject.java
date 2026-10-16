@@ -76,7 +76,7 @@ public final class EditProject {
     public void trim(int index,long in,long out) {
         Clip c=clips.get(index);
         if(in<0 || out>c.sourceDurationMs || out-in<MIN_CLIP_MS) throw new IllegalArgumentException("Keep at least 0.10 seconds inside the source.");
-        c.inMs=in; c.outMs=out; playheadMs=Math.min(playheadMs,durationMs());
+        c.inMs=in; c.outMs=out;c.fadeInMs=Math.min(c.fadeInMs,c.durationMs());c.fadeOutMs=Math.min(c.fadeOutMs,c.durationMs()); playheadMs=Math.min(playheadMs,durationMs());
     }
     public void split(int index,long timelineMs) {
         if(clips.size()>=100)throw new IllegalArgumentException("This preview supports up to 100 clips.");

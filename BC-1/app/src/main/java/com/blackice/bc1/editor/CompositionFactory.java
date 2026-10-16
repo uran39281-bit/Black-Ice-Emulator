@@ -59,7 +59,7 @@ public final class CompositionFactory {
             for(EditProject.Placement p:group){
                 if(p.startMs>cursor)sequence.addGap((p.startMs-cursor)*1000);
                 EditProject.Clip c=p.clip;MediaItem.Builder source=new MediaItem.Builder().setUri(c.uri);
-                if(c.image)source.setImageDurationMs(c.durationMs());else source.setClippingConfiguration(new MediaItem.ClippingConfiguration.Builder().setStartPositionMs(c.inMs).setEndPositionMs(c.outMs).build());
+                if(c.image)source.setMimeType(MimeTypes.IMAGE_PNG).setImageDurationMs(c.durationMs());else source.setClippingConfiguration(new MediaItem.ClippingConfiguration.Builder().setStartPositionMs(c.inMs).setEndPositionMs(c.outMs).build());
                 EditProject.Clip previous=null;int ordinal=0;
                 if(c.track==0)for(EditProject.Placement candidate:placements){if(candidate.index==p.index)break;if(candidate.clip.track==0){previous=candidate.clip;ordinal++;}}
                 List<Effect> effects=audioOnly?List.of():List.of(Presentation.createForWidthAndHeight(w,h,Presentation.LAYOUT_SCALE_TO_FIT),new ClipEffect(p,previous,ordinal%2==0),FrameDropEffect.createDefaultFrameDropEffect(30));
