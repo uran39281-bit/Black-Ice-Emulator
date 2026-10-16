@@ -60,7 +60,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: >-
-            cd BC-1 && (gradle --no-daemon -Pbc1SideBySide connectedDebugAndroidTest; result=$?; mkdir -p app/build/reports/androidTests/screenshots; adb pull /sdcard/Android/data/com.blackice.bc1.preview/files/qa/. app/build/reports/androidTests/screenshots || true; exit "$result")
+            cd BC-1 && (gradle --no-daemon -Pbc1SideBySide connectedDebugAndroidTest; result=$?; mkdir -p app/build/reports/androidTests/screenshots; adb pull /sdcard/Download/bc1-qa/. app/build/reports/androidTests/screenshots || result=1; exit "$result")
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -52,6 +52,8 @@ public class WorkspaceTest {
         File dir=new File(inst.getTargetContext().getExternalFilesDir(null),"qa");assertTrue(dir.isDirectory()||dir.mkdirs());
         try(FileOutputStream out=new FileOutputStream(new File(dir,name+".png"))){assertTrue(b.compress(Bitmap.CompressFormat.PNG,100,out));}
         b.recycle();
+        // AGP uninstalls the app after connected tests; keep emulator-only QA captures outside app data.
+        shell("mkdir -p /sdcard/Download/bc1-qa && cp "+new File(dir,name+".png").getAbsolutePath()+" /sdcard/Download/bc1-qa/"+name+".png");
     }
     @Test public void emulatorWorkspacesKeepMonitorAndToolsUsable() throws Exception {
         // Window overrides are confined to an emulator and restored even after a test failure.
