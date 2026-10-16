@@ -266,7 +266,7 @@ public final class EditorActivity extends Activity {
     private View buildTimeline(){ScrollView vertical=new ScrollView(this);timelineScroll=new HorizontalScrollView(this);timelineScroll.setFillViewport(true);timelineScroll.setContentDescription("Timeline scroll");timeline=new TimelineCanvas();timelineScroll.setOnScrollChangeListener((v,x,y,oldX,oldY)->timeline.invalidate());vertical.setOnScrollChangeListener((v,x,y,oldX,oldY)->timeline.invalidate());timelineScroll.addView(timeline,new HorizontalScrollView.LayoutParams(-2,dp(40+lanes().size()*52+56)));vertical.addView(timelineScroll);return vertical;}
     private EditProject.Clip clip(){return project.clips.isEmpty()?null:project.clips.get(selected);}
     private void renderInspector() {
-        if(inspector==null)return;inspector.removeAllViews();
+        if(inspector==null)return;updateMediaSelection();inspector.removeAllViews();
         for(int i=0;i<navTabs.size();i++){navTabs.get(i).setTextColor(i==tab?CYAN:TEXT);navTabs.get(i).setBackground(navBackground(i==tab));navTabs.get(i).setSelected(i==tab);for(android.graphics.drawable.Drawable icon:navTabs.get(i).getCompoundDrawables())if(icon!=null)icon.setTint(i==tab?CYAN:TEXT);}
         String[] headings={"MEDIA LIBRARY","CLIP EDITOR","GPU EFFECTS","OVERLAYS & MUSIC","PROJECT SETTINGS"};
         TextView heading=label(headings[tab],12,CYAN,true);inspector.addView(heading);heading.setContentDescription(headings[tab]+". Long press and drag to dock the tool panel in wide mode.");heading.setOnLongClickListener(v->{if(uiLocked)return false;if(inspector.getParent() instanceof ScrollView){v.startDragAndDrop(ClipData.newPlainText("panel","tools"),new View.DragShadowBuilder(v),inspector.getParent(),0);return true;}return false;});
@@ -555,6 +555,7 @@ public final class EditorActivity extends Activity {
     private View mediaCard(int index){
         EditProject.Clip clip=project.clips.get(index);
         LinearLayout card=column();card.setPadding(dp(5),dp(5),dp(5),dp(5));
+        card.setTag(index);
         card.setBackground(buttonBackground(index==selected));card.setSelected(index==selected);
         ImageView image=new ImageView(this);image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setImageDrawable(new V1Icon(clip.track>=4?"Volume":"Media",MUTED));
@@ -569,6 +570,17 @@ public final class EditorActivity extends Activity {
         card.setFocusable(true);card.setContentDescription("Select "+clip.name);
         card.setOnClickListener(v->{selected=index;tab=1;seek(project.placements().get(index).startMs);renderInspector();renderMediaGrid();});
         return card;
+    }
+    private void updateMediaSelection(){
+        if(mediaGrid==null)return;
+        for(int row=0;row<mediaGrid.getChildCount();row++)if(mediaGrid.getChildAt(row) instanceof ViewGroup){
+            ViewGroup cells=(ViewGroup)mediaGrid.getChildAt(row);
+            for(int i=0;i<cells.getChildCount();i++){
+                View card=cells.getChildAt(i);if(!(card.getTag() instanceof Integer))continue;
+                boolean chosen=((Integer)card.getTag())==selected;
+                if(card.isSelected()!=chosen){card.setSelected(chosen);card.setBackground(buttonBackground(chosen));}
+            }
+        }
     }
     private void tell(String text){message=text==null?"Something went wrong.":text;if(status!=null)status.setText(message);}
     private int dp(float value){return Math.round(value*getResources().getDisplayMetrics().density);}
