@@ -286,7 +286,9 @@ public final class EditorActivity extends Activity {
     }
     @Override protected void onActivityResult(int request,int result,Intent data) {
         super.onActivityResult(request,result,data);if(result!=RESULT_OK||data==null)return;
-        if(request==EXPORT){if(data.getData()!=null)startExport(data.getData());return;}
+        if(request==EXPORT){if(data.getData()!=null){
+            try{getContentResolver().takePersistableUriPermission(data.getData(),Intent.FLAG_GRANT_WRITE_URI_PERMISSION);}catch(SecurityException ignored){/* Some providers grant access for the current task only. */}
+            startExport(data.getData());}return;}
         if(request!=IMPORT&&request!=MUSIC&&request!=OVERLAY)return;
         java.util.List<Uri> uris=new ArrayList<>();if(data.getClipData()!=null){for(int i=0;i<data.getClipData().getItemCount();i++)uris.add(data.getClipData().getItemAt(i).getUri());}else if(data.getData()!=null)uris.add(data.getData());
         if(uris.isEmpty())return;importing=true;tell("Importing media copies…");
