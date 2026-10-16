@@ -1,3 +1,20 @@
+# FINAL HANDOFF — v1.0.4 is tested and published
+
+Latest branch `bc-1-v1.0.4-diagnostics`; checkpoint `ddf5a630f44fff240dacb64728c7f4f1e59114e1`. Read its NIGHT-WORK.md and BC-1-v1.0.4-QA.md for complete evidence. Tested source `ae912eec2ca3a9d4a63212ae8646646bd30c24c5`, Actions `38888011311`: build and GPU jobs succeeded,36 unit+20 Android tests, lint0errors30warnings, FOUR independent H.2641920×1080/AAC MP4 checks passed. Includes failed-source cleanup/recovery, actual diagnostic clipboard UI, all GPU effects/transitions, phone/wide/compact layouts and real paused-preview pixels. Final screenshots visually reviewed.
+
+Deliver this direct link at04:30 Phoenix (not before):
+https://raw.githubusercontent.com/uran39281-bit/bc-1/main/v1.0.4/BC-1-v1.0.4.apk
+
+SHA256 `7e80ed1718bf84c2bf68749681c11a13c54ba9d5dbe558467316dfea1e732ffe`; versionName1.0.4/code16, packagecom.blackice.bc1.preview; signing continuity verified. Raw published bytes compared identical. APK repo commit `a149cde3a9957f1b54c32f8861054e783c1b603e`; saved identity `libfile_b86329d0f7588191a7ff933406ce87b1`; local `/workspace/scratch/9d8e062dc089/deliverables/BC-1-v1.0.4.apk`. All previous APKs preserved.
+
+New this run: Setup → Export diagnostics → Copy report (redacted class/code/stage summary, no media paths/messages, no automatic sending), persistent last-failure report and recovery tests. Earlier V1 improvements, thumbnail fix, keyframes/layers/chroma/audio/project bundles retained. No3DPageCurl.
+
+Keep final delivery very short: APK link,36+20 tests/four MP4 checks, physical Snapdragon/DeX untested. Development-signed debug build, not production-stable certification. Earlier v1.0.3 intermittent muxer failure did not recur in subsequent tests; initiating cause remains unknown and is disclosed in QA. Do not claim it fixed. V1 concept fidelity improved, not pixel-perfect; project-flow/category-inspector work remains. The existing04:30 delivery task is enabled; no duplicate automation needed.
+
+Historical checkpoints below (pending statuses are superseded by this handoff):
+
+---
+
 # Active candidate: bc-1-v1.0.4-diagnostics
 
 Read NIGHT-WORK.md on `bc-1-v1.0.4-diagnostics`. Source `ae912eec2ca3a9d4a63212ae8646646bd30c24c5`, Actions `38888011311` pending. Adds copyable redacted export diagnostics under Setup, failure cleanup/recovery test and actual clipboard UI test;36 local unit tests pass. API35 CI must pass20 Android tests and FOUR independent exports (three sequential plus post-failure recovery). New versionCode16/name1.0.4; do not publish until all gates and UI screenshots pass. Latest published remainsv1.0.3 below. The investigation run38881066895 passed18 Android tests and all three MP4 checks; original intermittent muxer cause remains unknown, not declared fixed.
