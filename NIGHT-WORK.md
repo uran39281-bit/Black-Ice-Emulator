@@ -1,5 +1,9 @@
 # BC-1 overnight development checkpoint
 
+## Active investigation: bc-1-export-reliability
+
+Continue this branch for export reliability; v1.0.3 remains the published download. This branch only adds debug-only nested ExportException logging and three consecutive required 1080p service exports, each independently ffmpeg-decoded/ffprobed. No automatic retry, timeout increase, codec-policy change or skipped tests. Waits for foreground-service destruction between exports. It does NOT claim to fix the intermittent muxer error. Artifact is intentionally named `BC-1-export-investigation-DO-NOT-PUBLISH`; manifest still1.0.3/code15, so NEVER publish these changed bytes over v1.0.3. Any qualified product change must use a new version/code/path. Inspect CI logs, especially BC1Export and BC1ExportTest, before choosing a targeted fix.
+
 ## Latest published work: v1.0.3 thumbnail reliability
 
 Continue `bc-1-v1.0.3-thumbnails` unless a newer active follow-up is recorded above. Tested source `261c82dea4bc2628953c62d2a0b262f37945764b`, Actions `38874891062` attempt2: 33 unit +18 Android tests, lint0errors30warnings; independent MP4 decode/format gate passed. Final paused-first-frame, phone9:16, wide16:9, compact-wide and thumbnail-stress screenshots reviewed. Baseline run38874632718 reproduced the stale thumbnail; current-view observer fix passes in both candidate attempts.

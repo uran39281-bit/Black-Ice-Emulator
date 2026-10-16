@@ -63,6 +63,8 @@ public class VideoEditorTest {
             if(cancel)scenario.onActivity(a->a.startService(new android.content.Intent(a,ExportService.class).setAction(ExportService.ACTION_CANCEL)));
             while(prefs.getBoolean("running",false)&&System.currentTimeMillis()<deadline)Thread.sleep(100);
             assertFalse("Export service timed out",prefs.getBoolean("running",false));
+            while(ExportService.isRunning()&&System.currentTimeMillis()<deadline)Thread.sleep(50);
+            assertFalse("Finished export service releases its lifecycle",ExportService.isRunning());
             if(cancel){assertEquals("Export cancelled",prefs.getString("status",""));assertFalse(prefs.getBoolean("success",false));}
             else {assertTrue(prefs.getString("status","Export did not start"),prefs.getBoolean("success",false));assertTrue(destination.length()>1000);}
         }
@@ -107,6 +109,10 @@ public class VideoEditorTest {
         EditProject.Music music=new EditProject.Music();music.uri=fixture("music.wav");music.name="test music";music.sourceDurationMs=1000;music.outMs=1000;music.startMs=500;p.music=music;
         ProjectStore store=new ProjectStore(context);store.save(p);EditProject restored=store.load(p.id);
         assertEquals(ProjectStore.encode(p),ProjectStore.encode(restored));assertEquals(3,restored.clips.size());
+        // Repeated fresh foreground exports expose intermittent codec/muxer failures.
+        // This is not a retry: every iteration must pass, and every output is decoded by CI.
+        for(int iteration=0;iteration<3;iteration++){
+        android.util.Log.i("BC1ExportTest","1080p service export iteration "+iteration);
         File file=serviceExport(restored,false);
         try(MediaMetadataRetriever r=new MediaMetadataRetriever()) {
             r.setDataSource(file.getPath());assertEquals("1920",r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH));assertEquals("1080",r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT));
@@ -116,7 +122,8 @@ public class VideoEditorTest {
         for(int i=0;i<extractor.getTrackCount();i++){String mime=extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME);audio|="audio/mp4a-latm".equals(mime);video|="video/avc".equals(mime);}
         extractor.release();assertTrue(audio&&video);
         // Keep the acceptance export in test output for manual decoding / ffprobe checks.
-        File report=new File(context.getFilesDir(),"qa");report.mkdirs();java.nio.file.Files.copy(file.toPath(),new File(report,"acceptance-1080p.mp4").toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING);file.delete();
+        File report=new File(context.getFilesDir(),"qa");report.mkdirs();java.nio.file.Files.copy(file.toPath(),new File(report,"acceptance-1080p-"+iteration+".mp4").toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING);file.delete();
+        }
     }
     @Test public void previewSeeksAfterTrimAcrossBothTracks() throws Exception {
         EditProject p=project(0);CountDownLatch ready=new CountDownLatch(1);AtomicReference<PlaybackException> error=new AtomicReference<>();AtomicReference<CompositionPlayer> ref=new AtomicReference<>();

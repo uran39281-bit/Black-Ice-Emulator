@@ -59,11 +59,18 @@ public final class ExportService extends Service {
                             .setRequestedVideoEncoderSettings(new VideoEncoderSettings.Builder().setBitrate(8_000_000).build()).build())
                     .addListener(new Transformer.Listener(){
                         @Override public void onCompleted(Composition c,ExportResult result) {publish();}
-                        @Override public void onError(Composition c,ExportResult r,ExportException e) {finish("Export failed: "+e.getMessage(),false);}
+                        @Override public void onError(Composition c,ExportResult r,ExportException e) {exportFailed(e);}
                     }).build();
             transformer.start(CompositionFactory.build(this,project,true),output.getAbsolutePath());main.post(poll);
-        } catch(Exception e) {finish("Export failed: "+e.getMessage(),false);}
+        } catch(Exception e) {exportFailed(e);}
         return START_NOT_STICKY;
+    }
+    private void exportFailed(Exception error) {
+        // Preserve nested codec/muxer causes for device QA, only in debuggable builds.
+        // Do not change encoder policy or mask a failure with an automatic retry.
+        if((getApplicationInfo().flags&android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0)
+            android.util.Log.e("BC1Export","Export failed",error);
+        finish("Export failed: "+error.getMessage(),false);
     }
     private void publish() {
         copying=true;main.removeCallbacks(poll);update("Saving MP4…",100);

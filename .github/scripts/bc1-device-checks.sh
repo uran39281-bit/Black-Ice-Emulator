@@ -18,17 +18,19 @@ if rg 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed' BC-1/app/build/report
 rg '^OK \([0-9]+ tests?\)' BC-1/app/build/reports/androidTests/instrumentation.txt
 
 # Validate the exported bytes independently of the Android media stack.
-ACCEPTANCE_MP4=BC-1/app/build/reports/androidTests/qa/acceptance-1080p.mp4
+for iteration in 0 1 2; do
+ACCEPTANCE_MP4="BC-1/app/build/reports/androidTests/qa/acceptance-1080p-${iteration}.mp4"
 ffmpeg -v error -xerror -i "$ACCEPTANCE_MP4" -f null -
-ffprobe -v error -show_streams -show_format -of json "$ACCEPTANCE_MP4" > BC-1/app/build/reports/androidTests/qa/acceptance-ffprobe.json
-python3 - <<'PYVERIFY'
-import json
+ffprobe -v error -show_streams -show_format -of json "$ACCEPTANCE_MP4" > "${ACCEPTANCE_MP4}.ffprobe.json"
+python3 - "${ACCEPTANCE_MP4}.ffprobe.json" <<'PYVERIFY'
+import json, sys
 from pathlib import Path
-report=json.loads(Path('BC-1/app/build/reports/androidTests/qa/acceptance-ffprobe.json').read_text())
+report=json.loads(Path(sys.argv[1]).read_text())
 video=next(s for s in report['streams'] if s['codec_type']=='video')
 audio=next(s for s in report['streams'] if s['codec_type']=='audio')
 assert (video['codec_name'],video['width'],video['height'])==('h264',1920,1080), video
 assert audio['codec_name']=='aac', audio
 assert 3 < float(report['format']['duration']) < 5, report['format']
-print('Independent MP4 check passed: H.264 1920x1080 + AAC; decoded without errors')
+print('Independent MP4 check passed:', sys.argv[1], 'H.264 1920x1080 + AAC; decoded without errors')
 PYVERIFY
+done
