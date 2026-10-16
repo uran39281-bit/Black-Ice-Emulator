@@ -239,7 +239,7 @@ public final class EditorActivity extends Activity {
     }
     private View quickTools(){
         HorizontalScrollView scroll=new HorizontalScrollView(this);scroll.setHorizontalScrollBarEnabled(false);scroll.setContentDescription("Editing shortcuts");scroll.setBackgroundColor(PANEL);
-        LinearLayout bar=row();bar.setPadding(dp(2),dp(4),dp(2),dp(4));bar.setBackgroundColor(PANEL);
+        LinearLayout bar=row();bar.setBaselineAligned(false);bar.setPadding(dp(2),dp(4),dp(2),dp(4));bar.setBackgroundColor(PANEL);
         String[] names={"Split","Trim","Duplicate","Opacity","Chroma Key","Extract Audio","Volume","Effects","Delete"};
         for(String name:names){TextView control=iconButton(name,v->{if(clip()==null){tell("Select a clip first.");return;}if(!editable())return;if(name.equals("Extract Audio")&&clip().image){tell("Images do not contain an audio track.");return;}
             switch(name){
@@ -253,7 +253,7 @@ public final class EditorActivity extends Activity {
                 case "Effects":tab=2;renderInspector();break;
                 case "Delete":onKeyDown(KeyEvent.KEYCODE_FORWARD_DEL,new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_FORWARD_DEL));break;
             }
-        });bar.addView(control,new LinearLayout.LayoutParams(dp(name.length()>10?80:66),dp(56)));}
+        });bar.addView(control,new LinearLayout.LayoutParams(dp(name.length()>=10?80:66),dp(56)));}
         scroll.addView(bar);return scroll;
     }
     private void clipPercent(boolean volume){EditProject.Clip selectedClip=clip();if(selectedClip==null)return;numberDialog(volume?"Volume (%)":"Opacity (%)",String.valueOf(Math.round((volume?selectedClip.volume:selectedClip.opacity)*100)),value->{float percent=Float.parseFloat(value);if(!Float.isFinite(percent)||percent<0||percent>100)throw new IllegalArgumentException("Use a value from 0 to 100.");remember();if(volume)selectedClip.volume=percent/100;else selectedClip.opacity=percent/100;changed(volume?"Volume updated":"Opacity updated");});}
