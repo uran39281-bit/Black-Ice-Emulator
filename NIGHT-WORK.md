@@ -1,3 +1,11 @@
+# Active development has moved to bc-1-v1.0.1-ui
+
+Read NIGHT-WORK.md on `bc-1-v1.0.1-ui` for the latest follow-up. v1.0 is verified and published; do not overwrite it. The original V1 phone/desktop reference images have now been recovered and are stored on the new branch under BC-1/design/v1/. Earlier unavailable-reference notes below are historical.
+
+v1.0.1 candidate source: `e0cb73b1dad4125034c83f82d67acaca8d74e425`; Actions run `38868760540`. Adds V1 line icons, shortcut toolbar, preview scrubber, fixed track labels and more timeline space. Local 30 unit tests pass; full Android checks and screenshot review pending. VersionCode 13; publish only as a NEW versioned APK after verification.
+
+---
+
 # BC-1 overnight development checkpoint
 
 Target report: 2026-10-16 04:30 America/Phoenix (11:30 UTC). User authorized continued development, testing and V1 interface improvements. Keep notifications quiet until delivery unless the user asks for status.
