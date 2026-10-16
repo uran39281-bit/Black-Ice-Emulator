@@ -1,3 +1,11 @@
+## BC-1 v1.0.2 — V1 media browser
+
+Large tablet/DeX windows now use a two-column Project Media grid, All/Video/Audio/Image filters and filename search. Filtered cards select the original clip; highlights follow other selection controls. Query/filter state survives recreation. Phone and compact-wide layouts retain their existing arrangement.
+
+VersionName `1.0.2`, versionCode `14`: 33 unit +17 Android tests passed; lint0errors30warnings; exported H.264/AAC MP4 independently decoded. [Download APK](https://raw.githubusercontent.com/uran39281-bit/bc-1/main/v1.0.2/BC-1-v1.0.2.apk) · [QA and limits](../BC-1-v1.0.2-QA.md). Retained signing identity; older APKs preserved. Physical Snapdragon/DeX testing remains outstanding.
+
+---
+
 ## BC-1 v1.0.1 — V1 interface polish
 
 Monoline navigation/tool icons, nine editing shortcuts, seekable preview scrubber, pinned timeline labels and desktop Undo/Redo/Save bring the editor closer to the recovered [official V1 references](design/V1-REFERENCE.md). Compact-wide preview space is preserved.

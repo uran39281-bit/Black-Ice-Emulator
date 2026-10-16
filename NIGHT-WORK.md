@@ -1,12 +1,23 @@
 # BC-1 overnight development checkpoint
 
-## Active follow-up: v1.0.2 media browser
+## Latest verified work: v1.0.2 V1 media browser
 
-Continue `bc-1-v1.0.2-media`, based on verified v1.0.1. Candidate versionCode14/name1.0.2 is NOT published yet. It adds a responsive two-column desktop media browser, All/Video/Audio/Image filters and filename search, following the actual V1 desktop reference. Filtering is metadata-only; original clip indices and the preview surface are retained. Search/filter state survives activity recreation. Phone and compact-wide layouts remain unchanged. New MediaFilter unit tests and expanded Android workspace checks cover classification, locale-independent search, filtered selection and recreation. Run the full CI gate and review screenshots before publishing a NEW `v1.0.2/BC-1-v1.0.2.apk`. Preserve all older APKs and retained signing identity.
+Continue `bc-1-v1.0.2-media`. Tested source `5e551384278f03270258ff7149c4f36a3fe0d1ce`, Actions run `38871745189`: both jobs succeeded. 33 unit +17 Android tests passed, lint 0 errors /30 warnings. Independent ffmpeg decode and ffprobe H.264 1920×1080/AAC/duration gate passed. Final phone, wide, filtered-wide and compact-wide screenshots visually reviewed.
 
-## Latest work: v1.0.1 V1 interface polish
+New: responsive two-column Project Media grid, All/Video/Audio/Image filters and filename search. Search/filter state survives recreation. Filtered selection targets the original clip, and browser highlights follow inspector/timeline selection. Existing phone/compact-wide layouts, preview surface, effects and project schema are preserved.
 
-Continue branch `bc-1-v1.0.1-ui`. Tested code commit `27e09676cd88f875353dd5e86409dafd2d6f4d1c`; Actions run `38869704876`. This continues v0.2–v1.0; never restart or force-push older branches.
+APK: https://raw.githubusercontent.com/uran39281-bit/bc-1/main/v1.0.2/BC-1-v1.0.2.apk
+QA: https://github.com/uran39281-bit/bc-1/blob/main/v1.0.2/QA.md
+SHA256: `de63efff3bd6442e26419ae1693c0196d79a98219a1b1edfdf014c96bce3fa34`
+Package `com.blackice.bc1.preview`, versionName `1.0.2`, versionCode `14`, GLES3 required.
+Retained signing certificate verified; see below. Published APK repo commit `13de548b6c1a93555feb91cf8c894664376bebee`. Raw download byte-compared successfully.
+Artifacts: APK12032814882, build12033765250, GPU12033875888.
+Local APK: /workspace/scratch/9d8e062dc089/deliverables/BC-1-v1.0.2.apk
+Saved identity: `libfile_079c61f0980c8191ae6f51cf52ab3025`.
+
+## Preserved v1.0.1 V1 interface polish
+
+Historical branch `bc-1-v1.0.1-ui`. Tested code commit `27e09676cd88f875353dd5e86409dafd2d6f4d1c`; Actions run `38869704876`. This continues v0.2–v1.0; never restart or force-push older branches.
 
 Both jobs passed: 30 unit tests +17 Android tests, lint 0 errors /28 warnings. Independent ffmpeg decode and ffprobe H.264 1920×1080/AAC/duration check passed. Final paused-first-frame, phone9:16, wide16:9 and compact-wide screenshots visually reviewed; zoom/scroll pinned labels and corrected shortcut label confirmed. Artifact IDs: APK12032329690, build12032284915, GPU12032987524.
 
@@ -33,7 +44,7 @@ v1.0.1 adds monoline icons, nine functional editing shortcuts, preview scrubber,
 
 User authorized ongoing improvements until 2026-10-16 04:30 America/Phoenix (11:30 UTC); suppress notifications until then. Deliver the latest VERIFIED direct GitHub APK link at that time, with concise test results and physical-device limits. ChatGPT file links previously failed with a cross-site URL error.
 
-Remaining V1 differences are the dedicated project-flow screen, category-specific inspector, and denser two-column desktop media browser. Prefer a small complete, tested improvement next. Inspect the existing code and actual references before editing. Do not merely bump the version. Any new APK must increment versionCode above 13 and use a new versioned directory/file (for example v1.0.2), a new development branch, and full verification. Preserve this tested download. Read fresh branch heads before guarded GitHub ref updates. Update this checkpoint AND the pointer on `bc-1-v1.0` so later runs find the latest branch.
+Remaining V1 differences are the dedicated project-flow screen and category-specific inspector. The desktop media grid is now implemented. A useful performance follow-up is a stress test of rapid search while thumbnail decoding is pending: ThumbnailCache caps pending callbacks at eight, and card callbacks capture individual views. Investigate whether stable browser observers avoid stale placeholders without rebuilding all cards; this is a code-review risk, not a reproduced failure. Prefer a small complete, tested improvement next. Inspect the existing code and actual references before editing. Do not merely bump the version. Any new APK must increment versionCode above 14 and use a new versioned directory/file (for example v1.0.3), a new development branch, and full verification. Preserve this tested download. Read fresh branch heads before guarded GitHub ref updates. Update this checkpoint AND the pointer on `bc-1-v1.0` so later runs find the latest branch.
 
 ## Architecture and limits
 
@@ -43,13 +54,13 @@ Image/multilayer timelines use PreviewProxy: cancellable cached H.264/AAC render
 
 ## Verification and build workflow
 
-Use `.github/workflows/bc-1-android.yml` and `.github/scripts/bc1-device-checks.sh`: build/lint/30 unit tests, 17 Android tests, screenshots, independent ffmpeg decode + ffprobe H.264 1920×1080/AAC/duration check. Build and GPU jobs both must pass. Review actual paused first-frame, phone, wide and compact-wide screenshots, not just test totals.
+Use `.github/workflows/bc-1-android.yml` and `.github/scripts/bc1-device-checks.sh`: build/lint/33 unit tests, 17 Android tests, screenshots, independent ffmpeg decode + ffprobe H.264 1920×1080/AAC/duration check. Build and GPU jobs both must pass. Review actual paused first-frame, phone, wide and compact-wide screenshots, not just test totals.
 
 Local SDK/Gradle distributions unavailable. Do not retry earlier auto-review-denied Gradle download; use GitHub CI. Cached Java dependencies can compile UI/model code but do not replace Android tests.
 
 Retained private preview key: /root/.android/debug.keystore. NEVER print/upload/commit it. Sign with existing /tmp/SignBcApk.java/class and cached apksig 8.10.1; verify certificate above. If key unavailable, report the signing limitation and preserve old APKs.
 
-Local QA: /workspace/scratch/31791101a882/qa/v101-final/.
+Local QA: /workspace/scratch/9d8e062dc089/qa/v102-final/.
 Separate APK repository: uran39281-bit/bc-1, main. Publish versioned APK, checksum and QA; verify raw downloaded bytes. Save the user-facing APK persistently when available; Git-backed source needs no duplicate file storage.
 
 ## Preserved history
