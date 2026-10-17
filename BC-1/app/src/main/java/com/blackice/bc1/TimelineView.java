@@ -21,7 +21,7 @@ final class TimelineView extends View {
     static final class Row{final int kind,index;float top;Row(int k,int i){kind=k;index=i;}}
     private List<Row> rows=new ArrayList<>();
     // Gesture state
-    private float downX,downY,lastRawX,lastRawY;private long downTime,startPlayhead;
+    private float downX,downY,lastRawX,lastRawY,lastEventX;private int lastEventScroll;private long downTime,startPlayhead;
     private boolean pinching,moved,scrubbing,vertical,longPressed;
     private int operation,hitClip=-1,hitOverlay=-1,headerZone=-1,reorderFrom=-1,reorderTo=-1;
     private long pendingDelta,guide=-1;
@@ -200,15 +200,16 @@ final class TimelineView extends View {
         if(!moved)return true;
         if(reorderFrom>=0){Row r=rowAt(e.getY());reorderTo=r==null||r.kind==2?-1:rows.indexOf(r);invalidate();return true;}
         if(headerZone>=0){((ScrollView)a.timelineScroll.getParent()).scrollBy(0,Math.round(-dy));lastRawX=e.getRawX();lastRawY=e.getRawY();return true;}
-        if(operation!=0){updateDrag(e.getRawX());updateAutoScroll(e.getRawX());return true;}
+        if(operation!=0){lastEventX=e.getX();lastEventScroll=a.timelineScroll.getScrollX();updateDrag();updateAutoScroll();return true;}
         // Empty space (or an unselected layer): horizontal drags scrub under the centred playhead, vertical drags scroll layers.
         if(vertical)((ScrollView)a.timelineScroll.getParent()).scrollBy(0,Math.round(-dy));
         else{scrubbing=true;a.seek(Math.max(0,a.project.playheadMs-Math.round(dx/timelineScale()*1000)));}
         lastRawX=e.getRawX();lastRawY=e.getRawY();return true;
     }
-    private float contentX(float rawX){int[] loc=new int[2];getLocationOnScreen(loc);return rawX-loc[0];}
-    private void updateDrag(float rawX){
-        lastRawX=rawX;float xx=contentX(rawX);EditProject p=a.project;long tol=Math.round(a.dp(8)*1000/timelineScale());
+    /** The finger's content x: the last event position plus any auto-scroll since that event. */
+    private float contentX(){return lastEventX+(a.timelineScroll.getScrollX()-lastEventScroll);}
+    private void updateDrag(){
+        float xx=contentX();EditProject p=a.project;long tol=Math.round(a.dp(8)*1000/timelineScale());
         // Content coordinates already include any auto-scroll since the drag began.
         pendingDelta=time(xx)-time(downX);guide=-1;
         if(operation==OP_MULTI){long earliest=Long.MAX_VALUE;for(int i:a.selectedClips())earliest=Math.min(earliest,p.placements().get(i).startMs);for(int i:a.selectedOverlays())earliest=Math.min(earliest,p.overlays.get(i).startMs);
@@ -225,15 +226,15 @@ final class TimelineView extends View {
         if(pendingDelta!=before)guide=-1;invalidate();
     }
     /** Dragging near a viewport edge keeps scrolling (and scrubbing) so long moves and trims are possible. */
-    private void updateAutoScroll(float rawX){
-        int[] loc=new int[2];a.timelineScroll.getLocationOnScreen(loc);float local=rawX-loc[0],edge=a.dp(36);
+    private void updateAutoScroll(){
+        float local=lastEventX-lastEventScroll,edge=a.dp(36);
         int direction=local<edge+headerWidth()?-1:local>viewport()-edge?1:0;
         if(direction!=autoDirection){autoDirection=direction;removeCallbacks(autoScroll);if(direction!=0)postOnAnimation(autoScroll);}
     }
     private void autoScrollStep(){
         if(autoDirection==0||operation==0)return;long step=Math.max(1,Math.round(a.dp(6)*1000/timelineScale()));
         long next=Math.max(0,Math.min(a.project.durationMs()+5000,a.project.playheadMs+autoDirection*step));if(next==a.project.playheadMs){autoDirection=0;return;}
-        a.project.playheadMs=next;a.syncPosition();updateDrag(lastRawX);postOnAnimation(autoScroll);
+        a.project.playheadMs=next;a.syncPosition();updateDrag();postOnAnimation(autoScroll);
     }
     private void stopAutoScroll(){autoDirection=0;removeCallbacks(autoScroll);}
     private boolean up(MotionEvent e){

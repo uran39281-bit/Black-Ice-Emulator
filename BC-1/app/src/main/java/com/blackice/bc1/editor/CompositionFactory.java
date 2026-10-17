@@ -71,7 +71,8 @@ public final class CompositionFactory {
                 List<Effect> effects=audioOnly?List.of():List.of(Presentation.createForWidthAndHeight(w,h,Presentation.LAYOUT_SCALE_TO_FIT),new ClipEffect(p,previous,ordinal%2==0,renders),FrameDropEffect.createDefaultFrameDropEffect(project.frameRate));
                 // Audio tracks honour mute; a hidden picture keeps its own sound (mute it with volume).
                 float volume=audioOnly&&!renders?0:c.volume;
-                if(!audioOnly&&preview&&LayerOps.anySolo(project)&&!renders)volume=0;
+                // Pictures carry no sound, so their (silent) audio path is left untouched.
+                if(!audioOnly&&!c.image&&preview&&LayerOps.anySolo(project)&&!renders)volume=0;
                 EditedMediaItem item=new EditedMediaItem.Builder(source.build()).setFrameRate(project.frameRate).setRemoveVideo(audioOnly)
                     .setSpeed(new androidx.media3.common.audio.SpeedProvider(){public float getSpeed(long timeUs){return c.speed;}public long getNextSpeedChangeTimeUs(long timeUs){return C.TIME_UNSET;}})
                     .setDurationUs((c.image?c.durationMs():c.sourceDurationMs)*1000)

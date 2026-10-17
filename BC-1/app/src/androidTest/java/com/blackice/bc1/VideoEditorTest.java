@@ -176,7 +176,7 @@ public class VideoEditorTest {
     }
     @Test public void corruptOrFutureProjectDoesNotReplaceSavedProject() throws Exception {
         EditProject p=project(0);String json=ProjectStore.encode(p);ProjectStore store=new ProjectStore(context);store.save(p);
-        try{ProjectStore.decode(json.replace("\"schema\": 3","\"schema\": 999"));fail("Unsupported schema must fail");}catch(org.json.JSONException expected){}
+        try{ProjectStore.decode(json.replace("\"schema\": "+EditProject.SCHEMA,"\"schema\": 999"));fail("Unsupported schema must fail");}catch(org.json.JSONException expected){}
         assertEquals(json,ProjectStore.encode(store.load(p.id)));
     }
     @Test public void independentLayerKeyframesCompositeAndChromaKey() throws Exception {
