@@ -36,9 +36,14 @@ public final class CompositionFactory {
         return new DefaultAssetLoaderFactory(context,decoder.build(),androidx.media3.common.util.Clock.DEFAULT,null);
     }
     public static Composition build(Context context,EditProject project,boolean export) {
-        return buildAtHeight(context,project,export?1080:project.previewHeight);
+        return buildAtHeight(context,project,export?1080:project.previewHeight,!export);
     }
+    /** Export semantics: hidden layers and muted audio are omitted; solo is ignored. */
     public static Composition buildAtHeight(Context context,EditProject project,int shortEdge) {
+        return buildAtHeight(context,project,shortEdge,false);
+    }
+    /** Preview additionally isolates soloed layers. */
+    public static Composition buildAtHeight(Context context,EditProject project,int shortEdge,boolean preview) {
         project.validate(); if(project.clips.isEmpty()) throw new IllegalArgumentException("Import a video or image first.");
         int longEdge=(shortEdge*16/9+1)/2*2;
         int w=project.portrait?shortEdge:longEdge, h=project.portrait?longEdge:shortEdge;
@@ -62,11 +67,15 @@ public final class CompositionFactory {
                 if(c.image)source.setMimeType(MimeTypes.IMAGE_PNG).setImageDurationMs(c.durationMs());else source.setClippingConfiguration(new MediaItem.ClippingConfiguration.Builder().setStartPositionMs(c.inMs).setEndPositionMs(c.outMs).build());
                 EditProject.Clip previous=null;int ordinal=0;
                 if(c.track==0)for(EditProject.Placement candidate:placements){if(candidate.index==p.index)break;if(candidate.clip.track==0){previous=candidate.clip;ordinal++;}}
-                List<Effect> effects=audioOnly?List.of():List.of(Presentation.createForWidthAndHeight(w,h,Presentation.LAYOUT_SCALE_TO_FIT),new ClipEffect(p,previous,ordinal%2==0),FrameDropEffect.createDefaultFrameDropEffect(30));
-                EditedMediaItem item=new EditedMediaItem.Builder(source.build()).setFrameRate(30).setRemoveVideo(audioOnly)
+                boolean renders=LayerOps.renders(project,c,preview);
+                List<Effect> effects=audioOnly?List.of():List.of(Presentation.createForWidthAndHeight(w,h,Presentation.LAYOUT_SCALE_TO_FIT),new ClipEffect(p,previous,ordinal%2==0,renders),FrameDropEffect.createDefaultFrameDropEffect(project.frameRate));
+                // Audio tracks honour mute; a hidden picture keeps its own sound (mute it with volume).
+                float volume=audioOnly&&!renders?0:c.volume;
+                if(!audioOnly&&preview&&LayerOps.anySolo(project)&&!renders)volume=0;
+                EditedMediaItem item=new EditedMediaItem.Builder(source.build()).setFrameRate(project.frameRate).setRemoveVideo(audioOnly)
                     .setSpeed(new androidx.media3.common.audio.SpeedProvider(){public float getSpeed(long timeUs){return c.speed;}public long getNextSpeedChangeTimeUs(long timeUs){return C.TIME_UNSET;}})
                     .setDurationUs((c.image?c.durationMs():c.sourceDurationMs)*1000)
-                    .setEffects(new Effects(List.of(gain(c.volume,c.durationMs(),c.fadeInMs,c.fadeOutMs)),effects)).build();
+                    .setEffects(new Effects(List.of(gain(volume,c.durationMs(),c.fadeInMs,c.fadeOutMs)),effects)).build();
                 sequence.addItem(item);cursor=p.endMs;
             }
             if(cursor<duration)sequence.addGap((duration-cursor)*1000);sequences.add(sequence.build());
@@ -90,9 +99,10 @@ public final class CompositionFactory {
             sequences.add(audio.build());
         }
         List<Effect> finalEffects=new ArrayList<>();
-        if(!project.overlays.isEmpty()) finalEffects.add(new OverlayEffect(ImmutableList.of(new ProjectOverlay(context,project.overlays))));
+        List<EditProject.Overlay> overlays=new ArrayList<>();for(EditProject.Overlay o:project.overlays)if(LayerOps.renders(project,o,preview))overlays.add(o);
+        if(!overlays.isEmpty()) finalEffects.add(new OverlayEffect(ImmutableList.of(new ProjectOverlay(context,overlays))));
         finalEffects.add(Presentation.createForWidthAndHeight(w,h,Presentation.LAYOUT_SCALE_TO_FIT));
-        finalEffects.add(FrameDropEffect.createDefaultFrameDropEffect(30));
+        finalEffects.add(FrameDropEffect.createDefaultFrameDropEffect(project.frameRate));
         Composition.Builder composition=new Composition.Builder(sequences)
                 .setHdrMode(Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_OPEN_GL);
         // Audio-only sequences do not make a multi-input video graph. Media3's
@@ -137,31 +147,55 @@ public final class CompositionFactory {
             if(activeMask==mask&&!animated) return bitmap;
             bitmap.eraseColor(Color.TRANSPARENT); Canvas canvas=new Canvas(bitmap); Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);
             for(int i=0;i<overlays.size();i++) if((mask&(1<<i))!=0) {
-                EditProject.Overlay o=overlays.get(i);long local=Math.max(0,timeUs/1000-o.startMs);float x=(o.motion.value(0,local,o.x)+1)*width/2f,y=(1-o.motion.value(1,local,o.y))*height/2f;
-                float scale=o.motion.value(2,local,o.scale),opacity=o.motion.value(4,local,o.opacity);canvas.save();canvas.rotate(-o.motion.value(3,local,0),x,y);
-                paint.setAlpha(Math.round(opacity*255));
-                if(o.imageUri!=null) {
-                    Bitmap image=images.get(o.imageUri);
-                    if(image==null) try(java.io.InputStream in=context.getContentResolver().openInputStream(Uri.parse(o.imageUri))) {
-                        image=BitmapFactory.decodeStream(in); if(image==null) throw new java.io.IOException("Cannot decode overlay image"); images.put(o.imageUri,image);
-                    } catch(java.io.IOException e) {throw new VideoFrameProcessingException(e);}
-                    float iw=width*.45f*scale,ih=iw*image.getHeight()/image.getWidth();
-                    canvas.drawBitmap(image,null,new RectF(x-iw/2,y-ih/2,x+iw/2,y+ih/2),paint);
-                } else {
-                    paint.setColor(o.color); paint.setAlpha(Math.round(opacity*255)); paint.setTypeface(Typeface.create(o.font,Typeface.BOLD));
-                    paint.setTextAlign(new Paint.Align[]{Paint.Align.LEFT,Paint.Align.CENTER,Paint.Align.RIGHT}[o.alignment]); paint.setTextSize(Math.min(width,height)*.065f*scale);
-                    paint.setShadowLayer(3,0,2,Color.BLACK);
-                    String[] lines=o.text.split("\n",-1); float lineHeight=paint.getTextSize()*1.25f;
-                    for(int line=0;line<lines.length;line++) {
-                        String text=lines[line]; float measure=paint.measureText(text);
-                        if(measure>width*.9f) paint.setTextSize(paint.getTextSize()*width*.9f/measure);
-                        canvas.drawText(text,x,y+(line-(lines.length-1)/2f)*lineHeight,paint);
-                    }
-                    paint.clearShadowLayer();
-                }
-                canvas.restore();
+                EditProject.Overlay o=overlays.get(i);long local=Math.max(0,timeUs/1000-o.startMs);
+                draw(canvas,paint,o,local);
             }
             activeMask=mask; return bitmap;
+        }
+        /** Draws one text, image or shape layer through the same transform as video layers (y-down pixels). */
+        private void draw(Canvas canvas,Paint paint,EditProject.Overlay o,long local) throws VideoFrameProcessingException {
+            TransformMath.Transform t=TransformMath.of(o,local);float opacity=o.motion.value(Motion.OPACITY,local,o.opacity);
+            double[] m=TransformMath.matrix(t);float ax=t.anchorX*width/2f,ay=-t.anchorY*height/2f,cx=(t.x+1)*width/2f,cy=(1-t.y)*height/2f;
+            float a=(float)m[0],b=(float)-m[1],c=(float)-m[2],d=(float)m[3];
+            Matrix matrix=new Matrix();matrix.setValues(new float[]{a,b,cx+ax-(a*ax+b*ay),c,d,cy+ay-(c*ax+d*ay),0,0,1});
+            canvas.save();canvas.concat(matrix);
+            paint.reset();paint.setFlags(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);paint.setAlpha(Math.round(opacity*255));
+            if(o.blend>0) paint.setXfermode(new PorterDuffXfermode(new PorterDuff.Mode[]{PorterDuff.Mode.SRC_OVER,PorterDuff.Mode.MULTIPLY,PorterDuff.Mode.SCREEN,PorterDuff.Mode.OVERLAY,PorterDuff.Mode.ADD,PorterDuff.Mode.DARKEN,PorterDuff.Mode.LIGHTEN}[o.blend]));
+            float unit=Math.min(width,height),stroke=o.borderWidth*unit*.05f;
+            if(o.shadow>0) paint.setShadowLayer(o.shadow*unit*.04f,0,o.shadow*unit*.015f,Color.argb(Math.round(200*opacity),0,0,0));
+            if(o.imageUri!=null) {
+                Bitmap image=images.get(o.imageUri);
+                if(image==null) try(java.io.InputStream in=context.getContentResolver().openInputStream(Uri.parse(o.imageUri))) {
+                    image=BitmapFactory.decodeStream(in); if(image==null) throw new java.io.IOException("Cannot decode overlay image"); images.put(o.imageUri,image);
+                } catch(java.io.IOException e) {throw new VideoFrameProcessingException(e);}
+                float iw=width*.45f,ih=iw*image.getHeight()/image.getWidth();RectF r=new RectF(-iw/2,-ih/2,iw/2,ih/2);
+                canvas.drawBitmap(image,null,r,paint);
+                if(stroke>0){paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(stroke);paint.setColor(o.borderColor);paint.setAlpha(Math.round(opacity*255));canvas.drawRect(r,paint);}
+            } else if(o.shape>0) {
+                float half=unit*.2f;paint.setColor(o.color);paint.setAlpha(Math.round(opacity*Color.alpha(o.color)));
+                Path path=new Path();
+                if(o.shape==1) path.addRect(-half,-half,half,half,Path.Direction.CW);
+                else if(o.shape==2) path.addOval(-half,-half,half,half,Path.Direction.CW);
+                else if(o.shape==3){path.moveTo(0,-half);path.lineTo(half,half);path.lineTo(-half,half);path.close();}
+                else path.addRect(-half,-Math.max(1.5f,stroke)/2-unit*.006f,half,Math.max(1.5f,stroke)/2+unit*.006f,Path.Direction.CW);
+                canvas.drawPath(path,paint);
+                if(stroke>0&&o.shape!=4){paint.clearShadowLayer();paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(stroke);paint.setColor(o.borderColor);paint.setAlpha(Math.round(opacity*255));canvas.drawPath(path,paint);}
+            } else {
+                paint.setColor(o.color); paint.setAlpha(Math.round(opacity*255)); paint.setTypeface(Typeface.create(o.font,Typeface.BOLD));
+                paint.setTextAlign(new Paint.Align[]{Paint.Align.LEFT,Paint.Align.CENTER,Paint.Align.RIGHT}[o.alignment]);
+                // Size and the 90%-width fit are computed at the displayed scale, then drawn through the matrix.
+                float scale=Math.max(.05f,t.scale),size=unit*.065f*scale;
+                if(o.shadow<=0) paint.setShadowLayer(3/scale,0,2/scale,Color.BLACK);
+                String[] lines=o.text.split("\n",-1);
+                for(int line=0;line<lines.length;line++) {
+                    String text=lines[line]; paint.setTextSize(size); float measure=paint.measureText(text);
+                    float fitted=measure>width*.9f?size*width*.9f/measure:size;paint.setTextSize(fitted/scale);
+                    float y=(line-(lines.length-1)/2f)*size*1.25f/scale;
+                    if(stroke>0){Paint outline=new Paint(paint);outline.clearShadowLayer();outline.setStyle(Paint.Style.STROKE);outline.setStrokeWidth(stroke/scale);outline.setColor(o.borderColor);outline.setAlpha(Math.round(opacity*255));canvas.drawText(text,0,y,outline);}
+                    canvas.drawText(text,0,y,paint);
+                }
+            }
+            paint.reset();canvas.restore();
         }
         @Override public void release() throws VideoFrameProcessingException {super.release();if(bitmap!=null)bitmap.recycle();for(Bitmap b:images.values())b.recycle();images.clear();}
     }

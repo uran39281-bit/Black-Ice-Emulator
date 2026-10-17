@@ -6,6 +6,9 @@ uniform sampler2D uInput;
 uniform vec2 uTexel;
 uniform float uAspect,uIntensity,uOpacity,uProgress;
 uniform vec4 uTransform,uChroma;
+// x: signed width scale sign, y: signed height factor (aspect, sign = flip), z/w: tan(skew x/y).
+uniform vec4 uShape;
+uniform vec2 uAnchor;
 uniform vec3 uKeyColor;
 uniform int uEffect,uTransition,uRole,uTop;
 float rnd(vec2 p) { return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
@@ -23,9 +26,12 @@ float mask(vec2 uv,float p) {
 }
 void main() {
     float k=uIntensity,p=uProgress;
-    vec2 q=(vUV-.5-uTransform.xy*.5)*vec2(uAspect,1.0);
+    // Inverse of s = T + a + R·S·K·(l − a); see TransformMath for the forward mapping.
+    vec2 anchor=uAnchor*.5*vec2(uAspect,1.0);
+    vec2 q=(vUV-.5-uTransform.xy*.5)*vec2(uAspect,1.0)-anchor;
     float cs=cos(uTransform.w),sn=sin(uTransform.w);
-    q=mat2(cs,-sn,sn,cs)*q/max(.05,uTransform.z);
+    q=mat2(cs,-sn,sn,cs)*q/(max(.05,uTransform.z)*uShape.xy);
+    q=vec2(q.x-uShape.z*q.y,q.y-uShape.w*q.x)/(1.0-uShape.z*uShape.w)+anchor;
     vec2 uv=q/vec2(uAspect,1.0)+.5;
     float inside=step(0.0,uv.x)*step(uv.x,1.0)*step(0.0,uv.y)*step(uv.y,1.0);
     if(uRole>0 && uTransition==4) uv.x+=uRole==2?p:p-1.0;

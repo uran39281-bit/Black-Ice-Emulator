@@ -13,19 +13,21 @@ import java.nio.charset.StandardCharsets;
 public final class ClipEffect implements GlEffect {
     private final EditProject.Placement placement;
     private final EditProject.Clip previous;
-    private final boolean top;
+    private final boolean top,visible;
     public ClipEffect(EditProject.Placement placement,EditProject.Clip previous){this(placement,previous,placement.index%2==0);}
-    public ClipEffect(EditProject.Placement placement,EditProject.Clip previous,boolean top){this.placement=placement;this.previous=previous;this.top=top;}
+    public ClipEffect(EditProject.Placement placement,EditProject.Clip previous,boolean top){this(placement,previous,top,true);}
+    /** Hidden layers keep their decoder slot and timing but contribute no pixels. */
+    public ClipEffect(EditProject.Placement placement,EditProject.Clip previous,boolean top,boolean visible){this.placement=placement;this.previous=previous;this.top=top;this.visible=visible;}
     @Override public GlShaderProgram toGlShaderProgram(Context context,boolean useHdr) throws VideoFrameProcessingException {
-        return new Program(context,placement,previous,top,useHdr);
+        return new Program(context,placement,previous,top,visible,useHdr);
     }
     private static final class Program extends BaseGlShaderProgram {
         private final GlProgram program;
         private final EditProject.Placement p;
         private final EditProject.Clip previous;
-    private final boolean top;
-        Program(Context context,EditProject.Placement p,EditProject.Clip previous,boolean top,boolean hdr) throws VideoFrameProcessingException {
-            super(hdr,1); this.p=p; this.previous=previous;this.top=top;
+        private final boolean top,visible;
+        Program(Context context,EditProject.Placement p,EditProject.Clip previous,boolean top,boolean visible,boolean hdr) throws VideoFrameProcessingException {
+            super(hdr,1); this.p=p; this.previous=previous;this.top=top;this.visible=visible;
             try {
                 String vertex,fragment;
                 try(java.io.InputStream in=context.getAssets().open("shaders/video.vert")) { vertex=readShader(in); }
@@ -57,11 +59,14 @@ public final class ClipEffect implements GlEffect {
             try {
                 program.use(); program.setSamplerTexIdUniform("uInput",tex,0);
                 long sourceTime=Math.round(Math.max(0,timeMs-p.startMs)*c.speed)+c.inMs;
-                program.setFloatsUniform("uTransform",new float[]{c.motion.value(0,sourceTime,c.x),c.motion.value(1,sourceTime,c.y),c.motion.value(2,sourceTime,c.scale),(float)Math.toRadians(c.motion.value(3,sourceTime,c.rotation))});
+                TransformMath.Transform t=TransformMath.of(c,sourceTime);
+                program.setFloatsUniform("uTransform",new float[]{t.x,t.y,t.scale,(float)Math.toRadians(t.rotation)});
+                program.setFloatsUniform("uShape",new float[]{t.flipH?-1:1,t.aspect*(t.flipV?-1:1),(float)Math.tan(Math.toRadians(t.skewX)),(float)Math.tan(Math.toRadians(t.skewY))});
+                program.setFloatsUniform("uAnchor",new float[]{t.anchorX,t.anchorY});
                 program.setFloatsUniform("uKeyColor",new float[]{((c.keyColor>>16)&255)/255f,((c.keyColor>>8)&255)/255f,(c.keyColor&255)/255f});
                 program.setFloatsUniform("uChroma",new float[]{c.chroma?1:0,c.keyTolerance,c.keySoftness,c.keySpill});
                 program.setIntUniform("uEffect",c.effect); program.setFloatUniform("uIntensity",c.motion.value(5,sourceTime,c.intensity));
-                program.setFloatUniform("uOpacity",c.motion.value(4,sourceTime,c.opacity)); program.setIntUniform("uTransition",type);
+                program.setFloatUniform("uOpacity",visible?c.motion.value(4,sourceTime,c.opacity):0); program.setIntUniform("uTransition",type);
                 program.setIntUniform("uRole",role); program.setIntUniform("uTop",top?1:0);
                 program.setFloatUniform("uProgress",progress); program.bindAttributesAndUniforms();
                 GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP,0,4); GlUtil.checkGlError();

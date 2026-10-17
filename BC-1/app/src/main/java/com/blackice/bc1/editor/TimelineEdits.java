@@ -30,11 +30,12 @@ public final class TimelineEdits {
         float before=c.speed;long fadeIn=c.fadeInMs,fadeOut=c.fadeOutMs;c.speed=speed;c.fadeInMs=Math.min(fadeIn,c.durationMs());c.fadeOutMs=Math.min(fadeOut,c.durationMs());
         try{p.validate();}catch(RuntimeException e){c.speed=before;c.fadeInMs=fadeIn;c.fadeOutMs=fadeOut;throw e;}
     }
-    /** Returns the input unchanged when no edge lies within the screen-space tolerance. */
+    /** Snaps to zero, the playhead, markers and clip edges; returns the input unchanged when none lies within the screen-space tolerance. */
     public static long snap(EditProject p,int excluded,long time,long tolerance) {
         long target=time,distance=tolerance+1;
         long[] fixed={0,p.playheadMs};
         for(long edge:fixed){long d=Math.abs(edge-time);if(d<=tolerance&&d<distance){target=edge;distance=d;}}
+        for(long edge:p.markers){long d=Math.abs(edge-time);if(d<=tolerance&&d<distance){target=edge;distance=d;}}
         for(EditProject.Placement placement:p.placements())if(placement.index!=excluded)
             for(long edge:new long[]{placement.startMs,placement.endMs}){
                 long d=Math.abs(edge-time);if(d<=tolerance&&d<distance){target=edge;distance=d;}

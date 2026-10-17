@@ -6,7 +6,7 @@ import java.util.UUID;
 
 /** Portable edit decision list. Times are integer milliseconds; media is never modified. */
 public final class EditProject {
-    public static final int SCHEMA = 3;
+    public static final int SCHEMA = 4;
     public static final long MIN_CLIP_MS = 100;
     public String id = UUID.randomUUID().toString(), name = "Untitled project";
     public boolean portrait;
@@ -15,12 +15,35 @@ public final class EditProject {
     public final List<Clip> clips = new ArrayList<>();
     public final List<Overlay> overlays = new ArrayList<>();
     public Music music;
+    /** Editor frame rate: timeline frame grid, nudging and export cadence. */
+    public int frameRate = 30;
+    /** Row metadata for tracks 0–7; clips keep their track numbers, so older projects map directly. */
+    public final Track[] tracks = new Track[8];
+    /** Beat / cue markers in timeline milliseconds, kept sorted. */
+    public final List<Long> markers = new ArrayList<>();
+    /** Preview-only loop range; negative when unset. Never affects export. */
+    public long loopInMs = -1, loopOutMs = -1;
+    public EditProject(){for(int t=0;t<tracks.length;t++)tracks[t]=new Track(Track.defaultName(t));}
+
+    public static final class Track {
+        public String name; public int color;
+        public boolean hidden, solo, locked, muted, collapsed;
+        public Track(String name){this.name=name;color=0xFF40BFFF;}
+        public static String defaultName(int t){return t==0?"Main":t<4?"Layer "+t:"Audio "+(t-3);}
+        public Track copy(){Track c=new Track(name);c.color=color;c.hidden=hidden;c.solo=solo;c.locked=locked;c.muted=muted;c.collapsed=collapsed;return c;}
+    }
 
     public static final class Clip {
         public String id = UUID.randomUUID().toString(), uri, name;
         public boolean image, audioOnly;
         public int track; public long startMs,fadeInMs,fadeOutMs;
         public float x,y,scale=1,rotation,keyTolerance=.25f,keySoftness=.08f,keySpill=.5f;
+        /** Height relative to width scale (1 keeps proportions), skew in degrees, anchor in position units. */
+        public float aspect=1,skewX,skewY,anchorX,anchorY; public boolean flipH,flipV;
+        /** Source pixel size when known (0 = unknown, measured lazily for Fit/Fill). */
+        public int width,height;
+        /** Optional group identifier shared by layers that move together. */
+        public String group;
         public int keyColor=0xFF00FF00; public boolean chroma;
         public Motion motion=new Motion();
         public long sourceDurationMs, inMs, outMs;
@@ -31,6 +54,7 @@ public final class EditProject {
         public Clip copy() {
             Clip c = new Clip(); c.uri=uri; c.name=name; c.image=image;c.audioOnly=audioOnly;
             c.track=track;c.startMs=startMs;c.fadeInMs=fadeInMs;c.fadeOutMs=fadeOutMs;c.x=x;c.y=y;c.scale=scale;c.rotation=rotation;c.chroma=chroma;c.keyColor=keyColor;c.keyTolerance=keyTolerance;c.keySoftness=keySoftness;c.keySpill=keySpill;c.motion=motion.copy();
+            c.aspect=aspect;c.skewX=skewX;c.skewY=skewY;c.anchorX=anchorX;c.anchorY=anchorY;c.flipH=flipH;c.flipV=flipV;c.width=width;c.height=height;c.group=group;
             c.sourceDurationMs=sourceDurationMs; c.inMs=inMs; c.outMs=outMs;
             c.effect=effect; c.transition=transition; c.easing=easing;
             c.intensity=intensity; c.opacity=opacity; c.volume=volume; c.transitionMs=transitionMs;c.speed=speed;
@@ -42,7 +66,17 @@ public final class EditProject {
         public long startMs, endMs = 3000;
         public float x=0, y=-.65f, scale=.7f, opacity=1f; public Motion motion=new Motion();
         public String font="sans-serif-medium";public int color=0xFFFFFFFF,alignment=1;
+        /** 0 text/image, 1 rectangle, 2 ellipse, 3 triangle, 4 line. */
+        public int shape;
+        public String name, group;
+        public boolean hidden, solo, locked, flipH, flipV;
+        public float rotation, aspect=1, skewX, skewY, anchorX, anchorY, borderWidth, shadow;
+        public int borderColor=0xFF000000, blend;
+        public Overlay copy(){Overlay o=new Overlay();o.text=text;o.imageUri=imageUri;o.startMs=startMs;o.endMs=endMs;o.x=x;o.y=y;o.scale=scale;o.opacity=opacity;o.motion=motion.copy();o.font=font;o.color=color;o.alignment=alignment;o.shape=shape;o.name=name;o.group=group;o.hidden=hidden;o.solo=solo;o.locked=locked;o.flipH=flipH;o.flipV=flipV;o.rotation=rotation;o.aspect=aspect;o.skewX=skewX;o.skewY=skewY;o.anchorX=anchorX;o.anchorY=anchorY;o.borderWidth=borderWidth;o.shadow=shadow;o.borderColor=borderColor;o.blend=blend;return o;}
+        public String label(){if(name!=null&&!name.isEmpty())return name;if(imageUri!=null)return "Image";if(shape>0)return SHAPES[shape];return text;}
     }
+    public static final String[] SHAPES={"Text","Rectangle","Ellipse","Triangle","Line"};
+    public static final String[] BLENDS={"Normal","Multiply","Screen","Overlay","Add","Darken","Lighten"};
     public static final class Music {
         public String uri, name;
         public long sourceDurationMs, inMs, outMs, startMs;
@@ -107,8 +141,14 @@ public final class EditProject {
             throw new IllegalArgumentException("Invalid project identity.");
         if(clips.size()>100 || overlays.size()>20) throw new IllegalArgumentException("Preview supports up to 100 clips and 20 overlays.");
         if(previewHeight!=360 && previewHeight!=540 && previewHeight!=1080) throw new IllegalArgumentException("Invalid preview resolution.");
+        if(frameRate!=24&&frameRate!=25&&frameRate!=30) throw new IllegalArgumentException("Use 24, 25 or 30 fps.");
+        for(Track t:tracks) if(t==null||t.name==null||t.name.isEmpty()||t.name.length()>60) throw new IllegalArgumentException("Every layer needs a name of up to 60 characters.");
+        if(markers.size()>500) throw new IllegalArgumentException("Use at most 500 markers.");
+        for(int i=0;i<markers.size();i++) if(markers.get(i)<0||(i>0&&markers.get(i)<=markers.get(i-1))) throw new IllegalArgumentException("Markers must be distinct times from zero.");
+        if((loopInMs<0)!=(loopOutMs<0)||(loopInMs>=0&&loopOutMs-loopInMs<MIN_CLIP_MS)) throw new IllegalArgumentException("Loop range needs at least 0.10 seconds.");
         for(Clip c:clips) {
             c.motion.validate();
+            if(!(c.aspect>=.05f&&c.aspect<=20)||!(Math.abs(c.skewX)<=80)||!(Math.abs(c.skewY)<=80)||!Motion.allowed(0,c.anchorX)||!Motion.allowed(1,c.anchorY)||c.width<0||c.height<0||(c.group!=null&&c.group.length()>40)) throw new IllegalArgumentException("Invalid transform: "+c.name);
             if(c.audioOnly&&c.track<4)throw new IllegalArgumentException("Audio-only media belongs on an audio lane.");
             if(c.track<0||c.track>7||c.startMs<0||c.fadeInMs<0||c.fadeOutMs<0||c.fadeInMs>c.durationMs()||c.fadeOutMs>c.durationMs()||!Motion.allowed(0,c.x)||!Motion.allowed(1,c.y)||!Motion.allowed(2,c.scale)||!Motion.allowed(3,c.rotation)||!unit(c.keyTolerance)||!unit(c.keySoftness)||c.keySoftness<.001f||!unit(c.keySpill)||(c.track>=4&&c.image))throw new IllegalArgumentException("Invalid track, transform or fade.");
             if(c.uri==null || c.name==null || c.inMs<0 || c.outMs>c.sourceDurationMs || c.durationMs()<MIN_CLIP_MS || !Float.isFinite(c.speed)||c.speed<.25f||c.speed>4||(c.image&&c.speed!=1)
@@ -118,7 +158,7 @@ public final class EditProject {
         }
         List<Placement> ps=placements();
         for(int i=0;i<ps.size();i++)for(int n=i+1;n<ps.size();n++){Placement a=ps.get(i),b=ps.get(n);if(a.clip.track>0&&a.clip.track==b.clip.track&&a.startMs<b.endMs&&b.startMs<a.endMs)throw new IllegalArgumentException("Clips on the same layer cannot overlap. Use another layer or move the start time.");}
-        for(Overlay o:overlays)o.motion.validate();
+        for(Overlay o:overlays){o.motion.validate();if(o.shape<0||o.shape>=SHAPES.length||o.blend<0||o.blend>=BLENDS.length||!(o.aspect>=.05f&&o.aspect<=20)||!(Math.abs(o.skewX)<=80)||!(Math.abs(o.skewY)<=80)||!(Math.abs(o.rotation)<=3600)||!Motion.allowed(0,o.anchorX)||!Motion.allowed(1,o.anchorY)||!(o.borderWidth>=0&&o.borderWidth<=1)||!(o.shadow>=0&&o.shadow<=1)||(o.name!=null&&o.name.length()>60)||(o.group!=null&&o.group.length()>40))throw new IllegalArgumentException("Invalid overlay style.");}
         for(Overlay o:overlays) if(o.startMs<0 || o.endMs<=o.startMs || !unit(o.opacity)
                 || !Float.isFinite(o.scale) || o.scale<.1f || o.scale>2 || !Float.isFinite(o.x) || Math.abs(o.x)>1
                 || !Float.isFinite(o.y) || Math.abs(o.y)>1 || o.text==null || o.text.length()>200 || o.alignment<0||o.alignment>2 || !("sans-serif-medium".equals(o.font)||"serif".equals(o.font)||"monospace".equals(o.font)))
