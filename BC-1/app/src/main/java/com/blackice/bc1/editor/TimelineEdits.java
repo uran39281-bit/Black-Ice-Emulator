@@ -49,10 +49,10 @@ public final class TimelineEdits {
         for(double step:steps)if(step*pixelsPerSecond>=minimumPixels)return step;
         return 3600*Math.ceil(minimumPixels/pixelsPerSecond/3600);
     }
-    /** "4.0" / "1.5" seconds at second and half-second steps; "1s 12f" at frame steps; m:ss beyond a minute. */
+    /** "4.0s" / "1.5s" at second and half-second steps; "1s 12f" at frame steps; m:ss beyond a minute. */
     public static String rulerLabel(long ms,double stepSeconds,int fps) {
         if(stepSeconds>=60) return String.format(java.util.Locale.US,"%d:%02d",ms/60000,(ms/1000)%60);
-        if(stepSeconds>=.5) return String.format(java.util.Locale.US,"%.1f",ms/1000d);
+        if(stepSeconds>=.5) return String.format(java.util.Locale.US,"%.1fs",ms/1000d);
         long frames=Math.round(ms*fps/1000.0);
         return frames%fps==0?(frames/fps)+"s":(frames/fps)+"s "+(frames%fps)+"f";
     }

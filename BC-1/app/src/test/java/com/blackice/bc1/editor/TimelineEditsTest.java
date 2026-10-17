@@ -14,8 +14,8 @@ public class TimelineEditsTest {
     @Test public void speedSplitTrimAndSlipUseSourceTime(){EditProject p=project(false);TimelineEdits.speed(p,0,2);assertEquals(1500,p.durationMs());p.split(0,500);assertEquals(1500,p.clips.get(1).inMs);assertEquals(1500,p.durationMs());TimelineEdits.slip(p,1,2000);assertEquals(4000,p.clips.get(1).outMs);assertEquals(1000,p.clips.get(1).durationMs());TimelineEdits.duration(p,1,500);assertEquals(3000,p.clips.get(1).outMs);p.validate();}
     @Test public void invalidSpeedPreservesSourceAndFades(){EditProject p=project(false);for(float speed:new float[]{0,Float.NaN,5}){try{TimelineEdits.speed(p,0,speed);fail();}catch(IllegalArgumentException expected){}assertEquals(1,p.clips.get(0).speed,0);}p.clips.get(0).image=true;try{TimelineEdits.speed(p,0,2);fail();}catch(IllegalArgumentException expected){}}
     @Test public void rulerMovesFromSecondsToHalfSecondsToFrames() {
-        assertEquals(1,TimelineEdits.rulerStep(60,56,30),1e-9);assertEquals("4.0",TimelineEdits.rulerLabel(4000,1,30));
-        double half=TimelineEdits.rulerStep(120,56,30);assertEquals(.5,half,1e-9);assertEquals("1.5",TimelineEdits.rulerLabel(1500,half,30));assertEquals("2.0",TimelineEdits.rulerLabel(2000,half,30));
+        assertEquals(1,TimelineEdits.rulerStep(60,56,30),1e-9);assertEquals("4.0s",TimelineEdits.rulerLabel(4000,1,30));
+        double half=TimelineEdits.rulerStep(120,56,30);assertEquals(.5,half,1e-9);assertEquals("1.5s",TimelineEdits.rulerLabel(1500,half,30));assertEquals("2.0s",TimelineEdits.rulerLabel(2000,half,30));
         double frames=TimelineEdits.rulerStep(1200,56,24);assertEquals(2d/24,frames,1e-9);assertEquals("1s 12f",TimelineEdits.rulerLabel(1500,frames,24));assertEquals("2s",TimelineEdits.rulerLabel(2000,frames,24));
         assertEquals("1:30",TimelineEdits.rulerLabel(90000,60,30));
     }
