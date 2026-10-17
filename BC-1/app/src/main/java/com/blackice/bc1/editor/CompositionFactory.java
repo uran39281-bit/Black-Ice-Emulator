@@ -57,14 +57,20 @@ public final class CompositionFactory {
         for(EditProject.Placement p:placements)if(p.clip.track==0){(baseIndex++%2==0?even:odd).add(p);}
         if(!even.isEmpty())groups.add(even);if(!odd.isEmpty())groups.add(odd);
         for(int layer=4;layer<=7;layer++){List<EditProject.Placement> list=new ArrayList<>();for(EditProject.Placement p:placements)if(p.clip.track==layer)list.add(p);if(!list.isEmpty())groups.add(list);}
+        // Media3 1.11 creates the shared audio output from the first sequence that carries audio. A later
+        // sequence that also declares audio but starts with a picture asks for synthetic silence and races
+        // that creation (NullPointerException in SequenceAssetLoader). So only the first video sequence
+        // carries audio; the sound of other visual layers moves to parallel audio-only sequences.
+        List<EditedMediaItemSequence> separateAudio=new ArrayList<>();
         for(List<EditProject.Placement> group:groups){
-            group.sort(Comparator.comparingLong(p->p.startMs));boolean audioOnly=group.get(0).clip.track>=4;
+            group.sort(Comparator.comparingLong(p->p.startMs));boolean audioOnly=group.get(0).clip.track>=4,primary=sequences.isEmpty()&&!audioOnly;
             if(!audioOnly)videoInputs.add(group);
-            EditedMediaItemSequence.Builder sequence=new EditedMediaItemSequence.Builder(audioOnly?Set.of(C.TRACK_TYPE_AUDIO):Set.of(C.TRACK_TYPE_VIDEO,C.TRACK_TYPE_AUDIO));long cursor=0;
+            boolean videoOnly=!audioOnly&&!primary;
+            EditedMediaItemSequence.Builder sequence=new EditedMediaItemSequence.Builder(audioOnly?Set.of(C.TRACK_TYPE_AUDIO):videoOnly?Set.of(C.TRACK_TYPE_VIDEO):Set.of(C.TRACK_TYPE_VIDEO,C.TRACK_TYPE_AUDIO));
+            EditedMediaItemSequence.Builder sound=videoOnly?new EditedMediaItemSequence.Builder(Set.of(C.TRACK_TYPE_AUDIO)):null;boolean hasSound=false;long cursor=0,soundCursor=0;
             for(EditProject.Placement p:group){
                 if(p.startMs>cursor)sequence.addGap((p.startMs-cursor)*1000);
-                EditProject.Clip c=p.clip;MediaItem.Builder source=new MediaItem.Builder().setUri(c.uri);
-                if(c.image)source.setMimeType(MimeTypes.IMAGE_PNG).setImageDurationMs(c.durationMs());else source.setClippingConfiguration(new MediaItem.ClippingConfiguration.Builder().setStartPositionMs(c.inMs).setEndPositionMs(c.outMs).build());
+                EditProject.Clip c=p.clip;
                 EditProject.Clip previous=null;int ordinal=0;
                 if(c.track==0)for(EditProject.Placement candidate:placements){if(candidate.index==p.index)break;if(candidate.clip.track==0){previous=candidate.clip;ordinal++;}}
                 boolean renders=LayerOps.renders(project,c,preview);
@@ -73,14 +79,15 @@ public final class CompositionFactory {
                 float volume=audioOnly&&!renders?0:c.volume;
                 // Pictures carry no sound, so their (silent) audio path is left untouched.
                 if(!audioOnly&&!c.image&&preview&&LayerOps.anySolo(project)&&!renders)volume=0;
-                EditedMediaItem item=new EditedMediaItem.Builder(source.build()).setFrameRate(project.frameRate).setRemoveVideo(audioOnly)
-                    .setSpeed(new androidx.media3.common.audio.SpeedProvider(){public float getSpeed(long timeUs){return c.speed;}public long getNextSpeedChangeTimeUs(long timeUs){return C.TIME_UNSET;}})
-                    .setDurationUs((c.image?c.durationMs():c.sourceDurationMs)*1000)
-                    .setEffects(new Effects(List.of(gain(volume,c.durationMs(),c.fadeInMs,c.fadeOutMs)),effects)).build();
-                sequence.addItem(item);cursor=p.endMs;
+                sequence.addItem(item(c,audioOnly,videoOnly,volume,effects,project.frameRate));cursor=p.endMs;
+                if(sound!=null){if(!c.image&&hasAudio(context,c.uri)){if(p.startMs>soundCursor)sound.addGap((p.startMs-soundCursor)*1000);sound.addItem(item(c,true,false,volume,List.of(),project.frameRate));soundCursor=p.endMs;hasSound=true;}}
             }
             if(cursor<duration)sequence.addGap((duration-cursor)*1000);sequences.add(sequence.build());
+            if(hasSound){if(soundCursor<duration)sound.addGap((duration-soundCursor)*1000);separateAudio.add(sound.build());}
         }
+        // Video inputs keep the lowest sequence indices (the compositor addresses them by index).
+        int firstAudio=0;while(firstAudio<sequences.size()&&firstAudio<videoInputs.size())firstAudio++;
+        sequences.addAll(firstAudio,separateAudio);
         if(videoInputs.isEmpty())throw new IllegalArgumentException("Keep at least one video or image layer in the project.");
         if(project.music!=null && project.music.startMs<duration) {
             EditProject.Music m=project.music;
@@ -117,6 +124,21 @@ public final class CompositionFactory {
                     }
                 });
         return composition.setEffects(new Effects(List.of(),finalEffects)).build();
+    }
+    private static EditedMediaItem item(EditProject.Clip c,boolean removeVideo,boolean removeAudio,float volume,List<Effect> effects,int frameRate){
+        MediaItem.Builder source=new MediaItem.Builder().setUri(c.uri);
+        if(c.image)source.setMimeType(MimeTypes.IMAGE_PNG).setImageDurationMs(c.durationMs());else source.setClippingConfiguration(new MediaItem.ClippingConfiguration.Builder().setStartPositionMs(c.inMs).setEndPositionMs(c.outMs).build());
+        return new EditedMediaItem.Builder(source.build()).setFrameRate(frameRate).setRemoveVideo(removeVideo).setRemoveAudio(removeAudio&&!removeVideo)
+            .setSpeed(new androidx.media3.common.audio.SpeedProvider(){public float getSpeed(long timeUs){return c.speed;}public long getNextSpeedChangeTimeUs(long timeUs){return C.TIME_UNSET;}})
+            .setDurationUs((c.image?c.durationMs():c.sourceDurationMs)*1000)
+            .setEffects(new Effects(removeAudio?List.of():List.of(gain(volume,c.durationMs(),c.fadeInMs,c.fadeOutMs)),effects)).build();
+    }
+    private static final Map<String,Boolean> AUDIO_TRACKS=new java.util.concurrent.ConcurrentHashMap<>();
+    /** Whether a source has an audio track (cached; local files only, so this is quick). */
+    static boolean hasAudio(Context context,String uri){
+        Boolean known=AUDIO_TRACKS.get(uri);if(known!=null)return known;
+        boolean result;try{result=AudioWaveform.hasAudio(context,uri);}catch(Exception e){result=false;}
+        AUDIO_TRACKS.put(uri,result);return result;
     }
     private static GainProcessor gain(float volume){return gain(volume,0,0,0);}
     private static GainProcessor gain(float volume,long duration,long fadeIn,long fadeOut) {
