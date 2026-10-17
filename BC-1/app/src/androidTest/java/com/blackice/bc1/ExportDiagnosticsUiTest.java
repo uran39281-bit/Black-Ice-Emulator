@@ -24,7 +24,7 @@ public class ExportDiagnosticsUiTest {
         context.getSharedPreferences(ExportService.PREFS,0).edit().putString(ExportService.LAST_FAILURE,report).commit();
         context.getSharedPreferences(EditorActivity.PREFS,0).edit().remove("last-project").commit();
         try(ActivityScenario<EditorActivity> scenario=ActivityScenario.launch(EditorActivity.class)){
-            scenario.onActivity(a->{View root=a.getWindow().getDecorView();text(root,"Setup").performClick();text(root,"Export diagnostics").performClick();});
+            scenario.onActivity(a->{View root=a.getWindow().getDecorView();text(root,"Settings").performClick();text(root,"Export diagnostics").performClick();});
             inst.waitForIdleSync();
             AccessibilityNodeInfo root=inst.getUiAutomation().getRootInActiveWindow();assertNotNull(root);
             java.util.List<AccessibilityNodeInfo> copy=root.findAccessibilityNodeInfosByText("Copy report");assertEquals(1,copy.size());
@@ -33,7 +33,7 @@ public class ExportDiagnosticsUiTest {
             assertTrue(copy.get(0).performAction(AccessibilityNodeInfo.ACTION_CLICK));inst.waitForIdleSync();
             scenario.onActivity(a->{ClipboardManager clipboard=(ClipboardManager)a.getSystemService(Context.CLIPBOARD_SERVICE);
                 assertTrue(clipboard.hasPrimaryClip());String copied=clipboard.getPrimaryClip().getItemAt(0).coerceToText(a).toString();
-                assertTrue(copied.contains(report));assertTrue(copied.contains("BC-1 v1.1.0"));assertFalse(copied.contains("customer.mp4"));
+                assertTrue(copied.contains(report));assertTrue(copied.contains("BC-1 v2.0.0"));assertFalse(copied.contains("customer.mp4"));
                 clipboard.setPrimaryClip(ClipData.newPlainText("", ""));
             });
         }

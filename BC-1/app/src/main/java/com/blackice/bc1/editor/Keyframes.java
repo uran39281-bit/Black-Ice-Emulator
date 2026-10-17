@@ -91,6 +91,15 @@ public final class Keyframes {
         check.validate();
         for(int p=0;p<Motion.COUNT;p++){m.curves.get(p).clear();m.curves.get(p).addAll(check.curves.get(p));}
     }
+    /** For the right half of a split overlay: keys move to the new local time base; the value at the
+     * cut is kept as a key at zero so the visible animation does not jump. */
+    public static void splitAt(Motion m,long offset) {
+        for(int p=0;p<Motion.COUNT;p++){List<Motion.Key> keys=m.curves.get(p);if(keys.isEmpty())continue;
+            float atCut=m.value(p,offset,0);boolean dropped=false;
+            for(Motion.Key k:keys)k.timeMs-=offset;
+            for(Iterator<Motion.Key> it=keys.iterator();it.hasNext();)if(it.next().timeMs<0){it.remove();dropped=true;}
+            if(dropped&&(keys.isEmpty()||keys.get(0).timeMs>0))m.put(p,new Motion.Key(0,atCut));}
+    }
     /** Shifts every key (used when an animation preset is applied at a new start). */
     public static void shift(Motion m,long delta){for(List<Motion.Key> keys:m.curves)for(Motion.Key k:keys)k.timeMs+=delta;}
 }

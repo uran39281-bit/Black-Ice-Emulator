@@ -61,6 +61,7 @@ public final class MediaImporter {
                     }
                 }
                 if(bitmap==null) throw new IOException("This image format could not be decoded.");
+                clip.width=bitmap.getWidth();clip.height=bitmap.getHeight();
                 File sourceFile=copy;File png=new File(directory,copy.getName()+".png");copy=png;
                 try(OutputStream out=new FileOutputStream(png)) {if(!bitmap.compress(Bitmap.CompressFormat.PNG,100,out))throw new IOException("Image conversion failed.");}
                 finally {bitmap.recycle();sourceFile.delete();}
@@ -72,6 +73,7 @@ public final class MediaImporter {
                     clip.sourceDurationMs=duration==null?0:Long.parseLong(duration);clip.outMs=clip.sourceDurationMs;
                     boolean hasVideo="yes".equals(metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO));
                     clip.audioOnly=!hasVideo;
+                    if(hasVideo){int[] size=videoSize(metadata);clip.width=size[0];clip.height=size[1];}
                     boolean hasAudio="yes".equals(metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO));
                     if(clip.sourceDurationMs<EditProject.MIN_CLIP_MS || (audioOnly?!hasAudio:!hasVideo))
                         throw new IOException(audioOnly?"No playable audio was found.":"No playable video was found. Use Music for audio files.");
@@ -79,5 +81,20 @@ public final class MediaImporter {
             }
             clip.uri=Uri.fromFile(copy).toString();return clip;
         } catch(IOException|RuntimeException e) {copy.delete();throw e;}
+    }
+    /** Displayed size, accounting for rotation metadata. */
+    private static int[] videoSize(MediaMetadataRetriever metadata) {
+        int w=parse(metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)),h=parse(metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT));
+        int rotation=parse(metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION));
+        return rotation%180!=0?new int[]{h,w}:new int[]{w,h};
+    }
+    private static int parse(String value){try{return value==null?0:Integer.parseInt(value);}catch(NumberFormatException e){return 0;}}
+    /** Measures an already imported copy (older projects did not store sizes); null when unreadable. */
+    public static int[] measure(Context context,String uri,boolean image) {
+        try {
+            String path=Uri.parse(uri).getPath();
+            if(image){BitmapFactory.Options o=new BitmapFactory.Options();o.inJustDecodeBounds=true;BitmapFactory.decodeFile(path,o);return o.outWidth>0?new int[]{o.outWidth,o.outHeight}:null;}
+            try(MediaMetadataRetriever metadata=new MediaMetadataRetriever()){metadata.setDataSource(path);int[] size=videoSize(metadata);return size[0]>0?size:null;}
+        } catch(Exception e) { return null; }
     }
 }
