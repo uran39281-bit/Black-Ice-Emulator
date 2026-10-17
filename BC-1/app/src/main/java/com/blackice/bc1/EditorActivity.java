@@ -262,6 +262,8 @@ public final class EditorActivity extends Activity {
         play=button("▶  Play",v->togglePlay());controls.addView(play,new LinearLayout.LayoutParams(0,dp(48),1.5f));
         jumpEnd=compactButton("›","Jump to end",v->jump(true));controls.addView(jumpEnd,new LinearLayout.LayoutParams(0,dp(48),1));
         controls.addView(compactButton("↷","Redo",v->undo(true)),new LinearLayout.LayoutParams(0,dp(48),1));
+        // Glyph-only transport buttons need a larger face to read as clear icons.
+        for(int i=0;i<controls.getChildCount();i++)if(controls.getChildAt(i)!=play)((TextView)controls.getChildAt(i)).setTextSize(20);
         LinearLayout navigation=row();time=label("",11,TEXT,false);time.setGravity(Gravity.CENTER);navigation.addView(time,new LinearLayout.LayoutParams(0,dp(40),1));
         navigation.addView(compactButton("−","Zoom out timeline",v->zoomTimeline(1/1.5f,Float.NaN)));
         navigation.addView(compactButton("+","Zoom in timeline",v->zoomTimeline(1.5f,Float.NaN)));
