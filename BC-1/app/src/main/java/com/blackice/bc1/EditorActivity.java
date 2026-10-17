@@ -72,6 +72,7 @@ public final class EditorActivity extends Activity {
     LayoutPolicy.Preference mode=LayoutPolicy.Preference.AUTO;
     int selected=-1,selectedOverlay=-1,tab=0,workspaceFocus=0;
     View previewControls;
+    boolean comparing;
     TextView jumpStart,jumpEnd;
     float pixelsPerSecond=48;
     boolean active,importing,loading=true,snapping=true,exportLaunching,wasExporting;
@@ -144,7 +145,7 @@ public final class EditorActivity extends Activity {
         long position=project.playheadMs;releasePreview();project.playheadMs=position;
         if(project.clips.isEmpty()){syncPosition();return;}
         try {
-            EditProject snapshot=ProjectStore.snapshot(project);
+            EditProject snapshot=ProjectStore.snapshot(project);if(comparing&&compareSnapshot!=null){snapshot=ProjectStore.decode(compareSnapshot);snapshot.playheadMs=project.playheadMs;}
             previewHint("Preparing preview…");
             if(PreviewProxy.required(snapshot)){
                 previewPending=true;previewAutoplay=playWhenReady;
@@ -237,13 +238,18 @@ public final class EditorActivity extends Activity {
         if(surface.getParent()!=null)((android.view.ViewGroup)surface.getParent()).removeView(surface);
         monitor=new FrameLayout(this){@Override protected void onMeasure(int wSpec,int hSpec){
             int w=View.MeasureSpec.getSize(wSpec),h=View.MeasureSpec.getSize(hSpec);float ratio=project.portrait?9f/16:16f/9;
-            int sw=Math.min(w,(int)(h*ratio)),sh=(int)(sw/ratio);
+            int fit=Math.min(w,(int)(h*ratio));
+            // Navigation zoom / pan changes only the view of the frame, never a layer's scale or position.
+            int sw=Math.round(fit*previewZoom),sh=(int)(sw/ratio),offX=Math.round(previewPanX*sw),offY=Math.round(previewPanY*sh);
             FrameLayout.LayoutParams params=(FrameLayout.LayoutParams)surface.getLayoutParams();
-            if(params.width!=Math.max(1,sw)||params.height!=Math.max(1,sh)){params.width=Math.max(1,sw);params.height=Math.max(1,sh);surface.setLayoutParams(params);}super.onMeasure(wSpec,hSpec);
+            if(params.width!=Math.max(1,sw)||params.height!=Math.max(1,sh)||params.leftMargin!=offX||params.topMargin!=offY){params.width=Math.max(1,sw);params.height=Math.max(1,sh);params.leftMargin=offX;params.topMargin=offY;params.rightMargin=0;params.bottomMargin=0;surface.setLayoutParams(params);}super.onMeasure(wSpec,hSpec);
         }};
         monitor.setBackgroundColor(Color.BLACK);monitor.addView(surface,new FrameLayout.LayoutParams(-1,-1,Gravity.CENTER));
         emptyPreview=label("START YOUR FIRST CUT\n\n+ Import video or images",14,CYAN,true);emptyPreview.setGravity(Gravity.CENTER);emptyPreview.setContentDescription("Import video or images");emptyPreview.setFocusable(true);emptyPreview.setBackgroundColor(Color.BLACK);emptyPreview.setOnClickListener(v->{if(project.clips.isEmpty())pick(IMPORT,"*/*");else if(previewPending){releasePreview();previewHint("Preview cancelled • tap to prepare");}else preparePreview(false);});emptyPreview.setVisibility(project.clips.isEmpty()?View.VISIBLE:View.GONE);monitor.addView(emptyPreview,new FrameLayout.LayoutParams(-1,-1));
-        previewControls=new PreviewControls();monitor.addView(previewControls,new FrameLayout.LayoutParams(-1,-1));
+        previewControls=new PreviewEditor(this);monitor.addView(previewControls,new FrameLayout.LayoutParams(-1,-1));
+        TextView compare=button("Compare",null);compare.setTextSize(10);compare.setContentDescription("Hold to compare with the layer before the current adjustments");compare.setTooltipText(compare.getContentDescription());
+        compare.setOnTouchListener((v,e)->{if(e.getActionMasked()==MotionEvent.ACTION_DOWN)compare(true);else if(e.getActionMasked()==MotionEvent.ACTION_UP||e.getActionMasked()==MotionEvent.ACTION_CANCEL)compare(false);return true;});
+        monitor.addView(compare,new FrameLayout.LayoutParams(-2,dp(40),Gravity.BOTTOM|Gravity.END));
         return monitor;
     }
     View transport(boolean singleRow) {
@@ -412,9 +418,10 @@ public final class EditorActivity extends Activity {
     // ---- Selection, top bar and contextual helpers --------------------------------------------------
     int multiCount(){return multiClips.size()+multiOverlays.size();}
     void pruneSelection(){multiClips.removeIf(i->i>=project.clips.size());multiOverlays.removeIf(i->i>=project.overlays.size());if(multiCount()==1){multiClips.clear();multiOverlays.clear();}}
-    void deselect(){selected=-1;selectedOverlay=-1;multiClips.clear();multiOverlays.clear();panels.reset();renderInspector();}
-    void selectClip(int index,boolean seekToStart){selected=index;selectedOverlay=-1;multiClips.clear();multiOverlays.clear();tab=1;if(seekToStart)seek(project.placements().get(index).startMs);renderInspector();}
-    void selectOverlay(int index){selected=-1;selectedOverlay=index;multiClips.clear();multiOverlays.clear();tab=1;renderInspector();}
+    void deselect(){compareSnapshot=null;selected=-1;selectedOverlay=-1;multiClips.clear();multiOverlays.clear();panels.reset();renderInspector();}
+    void baseline(){try{compareSnapshot=ProjectStore.encode(project);}catch(Exception e){compareSnapshot=null;}}
+    void selectClip(int index,boolean seekToStart){if(index!=selected)baseline();selected=index;selectedOverlay=-1;multiClips.clear();multiOverlays.clear();tab=1;if(seekToStart)seek(project.placements().get(index).startMs);renderInspector();}
+    void selectOverlay(int index){if(selected>=0||index!=selectedOverlay)baseline();selected=-1;selectedOverlay=index;multiClips.clear();multiOverlays.clear();tab=1;renderInspector();}
     /** Ctrl/Shift-click or long-press: add or remove a layer from the multi-selection; groups select together. */
     void toggleMulti(int clipIndex,int overlayIndex){
         if(multiCount()==0){if(selected>=0)multiClips.add(selected);if(selectedOverlay>=0)multiOverlays.add(selectedOverlay);}
@@ -609,8 +616,9 @@ public final class EditorActivity extends Activity {
     void setAspect(float aspect){EditProject.Clip c=clip();EditProject.Overlay o=overlay();if(c!=null)c.aspect=aspect;else if(o!=null)o.aspect=aspect;}
     void setFlip(boolean horizontal){EditProject.Clip c=clip();EditProject.Overlay o=overlay();if(c!=null){if(horizontal)c.flipH=!c.flipH;else c.flipV=!c.flipV;}else if(o!=null){if(horizontal)o.flipH=!o.flipH;else o.flipV=!o.flipV;}}
     /** Local content half-size in frame units (before the layer's own transform). */
-    double[] layerHalf(){
-        double A=frameAspect();EditProject.Clip c=clip();EditProject.Overlay o=overlay();
+    double[] layerHalf(){return layerHalf(clip(),overlay());}
+    double[] layerHalf(EditProject.Clip c,EditProject.Overlay o){
+        double A=frameAspect();
         if(c!=null)return c.width>0&&c.height>0?TransformMath.fittedHalf(A,c.width/(double)c.height):new double[]{A/2,.5};
         if(o==null)return new double[]{A/2,.5};
         if(o.shape>0){double h=Math.min(A,1)*.2;return new double[]{h,o.shape==4?Math.max(.004,o.borderWidth*.025):h};}
@@ -645,6 +653,12 @@ public final class EditorActivity extends Activity {
         tell(TransformMath.offscreen(t,A,half[0],half[1])?"Layer is outside the frame • preview zoomed out to show it (tap Fit view to reset)":"Selected layer is in view");if(previewControls!=null)previewControls.invalidate();
     }
     void resetPreviewView(){previewZoom=1;previewPanX=0;previewPanY=0;if(monitor!=null)monitor.requestLayout();if(previewControls!=null)previewControls.invalidate();}
+    /** Before/after: hold Compare to preview the project as it was when the current layer was selected. */
+    void compare(boolean start){
+        if(start){if(compareSnapshot==null){tell("Select a layer and adjust it to compare before and after.");return;}comparing=true;preparePreview(false);}
+        else if(comparing){comparing=false;preparePreview(false);}
+        if(previewControls!=null)previewControls.invalidate();
+    }
     void previewMove(float x,float y){previewMoveX=x;previewMoveY=y;if(previewControls!=null)previewControls.invalidate();}
     EditProject.Overlay overlay(){return selected<0&&selectedOverlay>=0&&selectedOverlay<project.overlays.size()?project.overlays.get(selectedOverlay):null;}
     void overlayTools(){EditProject.Overlay o=overlay();inspector.addView(note(o.imageUri==null?"Text: "+o.text:"Image overlay"));
@@ -823,33 +837,6 @@ public final class EditorActivity extends Activity {
     }
     final class CurveView extends View{final Motion.Key key;final Runnable update;final Paint p=new Paint(3);int handle;CurveView(Motion.Key k,Runnable u){super(EditorActivity.this);key=k;update=u;setContentDescription("Cubic Bézier curve: drag either handle");}protected void onDraw(Canvas c){float w=getWidth()-dp(24),h=getHeight()-dp(24),m=dp(12);c.drawColor(PANEL);p.setColor(MUTED);p.setStrokeWidth(dp(1));c.drawLine(m,h+m,w+m,m,p);p.setColor(CYAN);p.setStrokeWidth(dp(2));float px=m,py=h+m;for(int i=1;i<=80;i++){float x=i/80f,y=Motion.ease(x,key);c.drawLine(px,py,m+x*w,m+(1-y)*h,p);px=m+x*w;py=m+(1-y)*h;}c.drawCircle(m+key.x1*w,m+(1-key.y1)*h,dp(6),p);c.drawCircle(m+key.x2*w,m+(1-key.y2)*h,dp(6),p);}public boolean onTouchEvent(MotionEvent e){float x=Math.max(0,Math.min(1,(e.getX()-dp(12))/(getWidth()-dp(24)))),y=Math.max(0,Math.min(1,1-(e.getY()-dp(12))/(getHeight()-dp(24))));if(e.getAction()==MotionEvent.ACTION_DOWN){handle=Math.hypot(x-key.x1,y-key.y1)<Math.hypot(x-key.x2,y-key.y2)?1:2;getParent().requestDisallowInterceptTouchEvent(true);}if(handle==1){key.x1=x;key.y1=y;}else{key.x2=x;key.y2=y;}update.run();invalidate();if(e.getAction()==MotionEvent.ACTION_UP){getParent().requestDisallowInterceptTouchEvent(false);performClick();}return true;}public boolean performClick(){super.performClick();return true;}}
 
-    /** Lightweight transform guide; GLES preview is rebuilt once at gesture completion. */
-    final class PreviewControls extends View {
-        final Paint paint=new Paint(3);EditProject.Clip target;EditProject.Overlay targetOverlay;float px,py,scale,rotation,startX,startY,baseX,baseY,baseScale,baseRotation,span,angle;long sourceTime;int gesture;boolean moved,multi;
-        PreviewControls(){super(EditorActivity.this);setContentDescription("Selected layer transform: drag to move, pinch to resize and rotate; mouse corner handles resize and rotate");setTooltipText("Drag selected layer • corner: resize • upper-left handle: rotate");}
-        private boolean available(){EditProject.Overlay o=overlay();if(o!=null)return !previewPending&&project.playheadMs>=o.startMs&&project.playheadMs<o.endMs;EditProject.Clip c=clip();if(c==null||c.track>=4||previewPending||project.playheadMs<project.placements().get(selected).startMs||project.playheadMs>=project.placements().get(selected).endMs)return false;return true;}
-        private float cx(){return surface.getLeft()+surface.getWidth()*(px+1)/2;}
-        private float cy(){return surface.getTop()+surface.getHeight()*(1-py)/2;}
-        private void values(){target=clip();targetOverlay=overlay();if(targetOverlay!=null){EditProject.Overlay o=targetOverlay;sourceTime=project.playheadMs-o.startMs;px=o.motion.value(0,sourceTime,o.x);py=o.motion.value(1,sourceTime,o.y);scale=o.motion.value(2,sourceTime,o.scale);rotation=o.motion.value(3,sourceTime,0);return;}sourceTime=Math.round((project.playheadMs-project.placements().get(selected).startMs)*target.speed)+target.inMs;px=target.motion.value(0,sourceTime,target.x);py=target.motion.value(1,sourceTime,target.y);scale=target.motion.value(2,sourceTime,target.scale);rotation=target.motion.value(3,sourceTime,target.rotation);}
-        @Override protected void onDraw(Canvas canvas){if(!available())return;if(gesture==0)values();float hw=surface.getWidth()*scale/2,hh=surface.getHeight()*scale/2;paint.setColor(CYAN);paint.setStrokeWidth(dp(1.5f));paint.setStyle(Paint.Style.STROKE);canvas.save();canvas.rotate(-rotation,cx(),cy());canvas.drawRect(cx()-hw,cy()-hh,cx()+hw,cy()+hh,paint);paint.setStyle(Paint.Style.FILL);canvas.drawCircle(cx()+hw,cy()+hh,dp(7),paint);canvas.drawCircle(cx()-hw,cy()-hh,dp(7),paint);canvas.restore();if(gesture!=0){paint.setColor(0x889FEAFF);if(Math.abs(px)<.001)canvas.drawLine(cx(),surface.getTop(),cx(),surface.getBottom(),paint);if(Math.abs(py)<.001)canvas.drawLine(surface.getLeft(),cy(),surface.getRight(),cy(),paint);}}
-        private float distance(MotionEvent e){return (float)Math.hypot(e.getX(1)-e.getX(0),e.getY(1)-e.getY(0));}
-        private float angle(MotionEvent e){return (float)Math.toDegrees(Math.atan2(e.getY(1)-e.getY(0),e.getX(1)-e.getX(0)));}
-        private float clamp(float v,float low,float high){return Math.max(low,Math.min(high,v));}
-        @Override public boolean onTouchEvent(MotionEvent e){int a=e.getActionMasked();if(a==MotionEvent.ACTION_DOWN){if(!available()||uiLocked||loading||importing||exporting())return false;values();if(player!=null)player.pause();startX=e.getX();startY=e.getY();baseX=px;baseY=py;baseScale=scale;baseRotation=rotation;moved=false;multi=false;gesture=1;
-                // Hit handles in the layer's local coordinates, including rotation.
-                double radians=Math.toRadians(rotation);float dx=e.getX()-cx(),dy=e.getY()-cy(),lx=(float)(dx*Math.cos(radians)-dy*Math.sin(radians)),ly=(float)(dx*Math.sin(radians)+dy*Math.cos(radians)),hw=surface.getWidth()*scale/2,hh=surface.getHeight()*scale/2;
-                if(Math.hypot(lx-hw,ly-hh)<dp(24))gesture=2;if(Math.hypot(lx+hw,ly+hh)<dp(24))gesture=3;
-                span=(float)Math.hypot(dx,dy);angle=(float)Math.toDegrees(Math.atan2(dy,dx));getParent().requestDisallowInterceptTouchEvent(true);return true;}
-            if(gesture==0)return false;
-            if(a==MotionEvent.ACTION_POINTER_DOWN&&e.getPointerCount()==2){multi=true;span=distance(e);angle=angle(e);baseScale=scale;baseRotation=rotation;return true;}
-            if(a==MotionEvent.ACTION_MOVE){moved|=Math.hypot(e.getX()-startX,e.getY()-startY)>dp(3)||e.getPointerCount()>1;if(e.getPointerCount()==2){scale=clamp(baseScale*distance(e)/Math.max(1,span),targetOverlay==null?.05f:.1f,targetOverlay==null?4:2);float delta=(angle(e)-angle+540)%360-180;rotation=clamp(baseRotation-delta,-3600,3600);}
-                else if(!multi){if(gesture==1){px=clamp(baseX+2*(e.getX()-startX)/Math.max(1,surface.getWidth()),targetOverlay==null?-2:-1,targetOverlay==null?2:1);py=clamp(baseY-2*(e.getY()-startY)/Math.max(1,surface.getHeight()),targetOverlay==null?-2:-1,targetOverlay==null?2:1);if(Math.abs(px)*surface.getWidth()/2<dp(8))px=0;if(Math.abs(py)*surface.getHeight()/2<dp(8))py=0;}else if(gesture==2)scale=clamp(baseScale*(float)Math.hypot(e.getX()-cx(),e.getY()-cy())/Math.max(1,span),targetOverlay==null?.05f:.1f,targetOverlay==null?4:2);else{float now=(float)Math.toDegrees(Math.atan2(e.getY()-cy(),e.getX()-cx()));rotation=clamp(baseRotation-((now-angle+540)%360-180),-3600,3600);}}
-                invalidate();return true;}
-            if(a==MotionEvent.ACTION_UP){if(moved&&target==clip()&&targetOverlay==overlay()){float[] values={px,py,scale,rotation};EditProject.Clip c=target;EditProject.Overlay o=targetOverlay;if(o!=null){edit("Overlay transform updated",()->{for(int i=0;i<4;i++)if(i==3||!o.motion.curves.get(i).isEmpty())o.motion.put(i,new Motion.Key(sourceTime,values[i]));else{if(i==0)o.x=values[i];if(i==1)o.y=values[i];if(i==2)o.scale=values[i];}});}else edit("Transform updated",()->{for(int i=0;i<4;i++)if(!c.motion.curves.get(i).isEmpty())c.motion.put(i,new Motion.Key(sourceTime,values[i]));else{if(i==0)c.x=values[i];if(i==1)c.y=values[i];if(i==2)c.scale=values[i];if(i==3)c.rotation=values[i];}});}gesture=0;getParent().requestDisallowInterceptTouchEvent(false);invalidate();performClick();return true;}
-            if(a==MotionEvent.ACTION_CANCEL){gesture=0;getParent().requestDisallowInterceptTouchEvent(false);invalidate();}return true;
-        }
-        @Override public boolean performClick(){super.performClick();return true;}
-    }
     void toggleLock(){uiLocked=!uiLocked;getSharedPreferences(PREFS,MODE_PRIVATE).edit().putBoolean("ui-locked",uiLocked).apply();renderInspector();tell(uiLocked?"UI locked • playback and seeking remain available":"UI unlocked");}
     void renderMediaBrowser(){
         if(mediaBrowser==null)return;
