@@ -24,19 +24,20 @@ public final class PresetStore {
         catch(IOException|JSONException e) { /* A damaged file is left for recovery and not overwritten here. */ }
         return result;
     }
-    public synchronized void save(String name,String kind,String payload) throws IOException {
+    /** @throws IllegalArgumentException for invalid names, a full store or a failed write (with a readable message). */
+    public synchronized void save(String name,String kind,String payload) {
         if(name==null||name.isBlank()||name.length()>60) throw new IllegalArgumentException("Use a preset name of 1 to 60 characters.");
         List<Preset> all=list(null);if(all.size()>=200) throw new IllegalArgumentException("Up to 200 presets can be saved. Delete one first.");
         all.add(new Preset(UUID.randomUUID().toString(),name.trim(),kind,payload));write(all);
     }
-    public synchronized void delete(String id) throws IOException { List<Preset> all=list(null);all.removeIf(p->p.id.equals(id));write(all); }
-    private void write(List<Preset> all) throws IOException {
+    public synchronized void delete(String id) { List<Preset> all=list(null);all.removeIf(p->p.id.equals(id));write(all); }
+    private void write(List<Preset> all) {
         JSONArray array=new JSONArray();
         try { for(Preset p:all) array.put(new JSONObject().put("id",p.id).put("name",p.name).put("kind",p.kind).put("payload",p.payload)); }
-        catch(JSONException e) { throw new IOException(e); }
+        catch(JSONException e) { throw new IllegalArgumentException("Presets could not be encoded."); }
         FileOutputStream out=null;
         try { out=file.startWrite(); out.write(array.toString().getBytes(StandardCharsets.UTF_8)); file.finishWrite(out); }
-        catch(IOException e) { if(out!=null) file.failWrite(out); throw e; }
+        catch(IOException e) { if(out!=null) file.failWrite(out); throw new IllegalArgumentException("Presets could not be saved: "+e.getMessage()); }
     }
 
     /** Saved elements store layers with times relative to the earliest selected start. */

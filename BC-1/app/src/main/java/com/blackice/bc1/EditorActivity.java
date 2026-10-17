@@ -66,7 +66,7 @@ public final class EditorActivity extends Activity {
     final java.util.Map<String,float[]> waveforms=new java.util.HashMap<>();
     int inspectorWidth=300;
     TextView status,time,play,projectLabel,exportButton,emptyPreview;
-    TimelineCanvas timeline;
+    TimelineView timeline;
     final Runnable timelineThumbnailsReady=()->{if(!isDestroyed()&&timeline!=null)timeline.invalidate();};
     HorizontalScrollView timelineScroll;
     LayoutPolicy.Preference mode=LayoutPolicy.Preference.AUTO;
@@ -82,7 +82,10 @@ public final class EditorActivity extends Activity {
     final Runnable autosave=()->saveNow();
     final Runnable pulse=new Runnable(){@Override public void run(){
         if(!active)return;
-        if(player!=null && player.isPlaying()) {project.playheadMs=Math.min(project.durationMs(),Math.max(0,player.getCurrentPosition()));syncPosition();}
+        if(player!=null && player.isPlaying()) {project.playheadMs=Math.min(project.durationMs(),Math.max(0,player.getCurrentPosition()));
+            // Preview-only loop range.
+            if(project.loopInMs>=0&&project.playheadMs>=project.loopOutMs){player.seekTo(project.loopInMs);project.playheadMs=project.loopInMs;}
+            syncPosition();}
         if(play!=null)play.setText(player!=null&&player.isPlaying()?"Ⅱ  Pause":"▶  Play");
         android.content.SharedPreferences export=getSharedPreferences(ExportService.PREFS,MODE_PRIVATE);
         boolean running=export.getBoolean("running",false);
@@ -91,7 +94,7 @@ public final class EditorActivity extends Activity {
         wasExporting=running;
         if(exportButton!=null)exportButton.setText(running?"Cancel":"Export");
         if(status!=null)status.setText(running?export.getString("status","Exporting…"):message);
-        main.postDelayed(this,100);
+        main.postDelayed(this,player!=null&&player.isPlaying()?33:100);
     }};
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
@@ -185,10 +188,10 @@ public final class EditorActivity extends Activity {
     void refreshProject() {
         if(selected>=project.clips.size())selected=-1;if(selectedOverlay>=project.overlays.size())selectedOverlay=-1;
         if(projectLabel!=null)projectLabel.setText(project.name+"  ▾");
-        if(timeline!=null){timeline.getLayoutParams().height=dp(40+lanes().size()*52+56);timeline.requestLayout();timeline.invalidate();}
+        if(timeline!=null){timeline.getLayoutParams().height=Math.round(timeline.contentHeight());timeline.requestLayout();timeline.invalidate();}
         if(monitor!=null)monitor.requestLayout();if(emptyPreview!=null)emptyPreview.setVisibility(project.clips.isEmpty()?View.VISIBLE:View.GONE);renderInspector();renderMediaBrowser();syncPosition();
     }
-    void syncPosition(){if(previewControls!=null)previewControls.invalidate();if(time!=null)time.setText(clock(project.playheadMs)+"  /  "+clock(project.durationMs()));if(timeline!=null)timeline.invalidate();if(previewScrubber!=null&&!scrubbing)previewScrubber.setProgress((int)(1000*project.playheadMs/Math.max(1,project.durationMs())));}
+    void syncPosition(){if(previewControls!=null)previewControls.invalidate();if(time!=null)time.setText(clock(project.playheadMs)+"  /  "+clock(project.durationMs()));if(timeline!=null)timeline.syncScroll();if(previewScrubber!=null&&!scrubbing)previewScrubber.setProgress((int)(1000*project.playheadMs/Math.max(1,project.durationMs())));}
     void seek(long ms){project.playheadMs=Math.max(0,Math.min(ms,project.durationMs()));if(player!=null){player.pause();player.seekTo(Math.min(project.playheadMs,Math.max(0,project.durationMs()-1)));}syncPosition();}
     void togglePlay(){if(previewPending){previewAutoplay=!previewAutoplay;tell(previewAutoplay?"Playback will start when the preview is ready.":"Preview will stay paused when ready.");return;}if(player==null){if(project.clips.isEmpty())tell("Import a video or image first.");else preparePreview(true);return;}if(player.getPlayWhenReady())player.pause();else{if(player.getPlaybackState()==Player.STATE_ENDED||project.playheadMs>=project.durationMs())player.seekTo(0);player.play();}}
 
@@ -253,6 +256,8 @@ public final class EditorActivity extends Activity {
         LinearLayout navigation=row();time=label("",11,TEXT,false);time.setGravity(Gravity.CENTER);navigation.addView(time,new LinearLayout.LayoutParams(0,dp(40),1));
         navigation.addView(compactButton("−","Zoom out timeline",v->zoomTimeline(1/1.5f,Float.NaN)));
         navigation.addView(compactButton("+","Zoom in timeline",v->zoomTimeline(1.5f,Float.NaN)));
+        navigation.addView(compactButton("Fit","Fit entire project",v->fitTimeline()));
+        navigation.addView(compactButton("Sel","Zoom to selection",v->zoomToSelection()));
         navigation.addView(compactButton("View","Workspace space",v->chooseSpace()));
         LinearLayout transport=column();
         if(getResources().getConfiguration().screenHeightDp>=780){
@@ -288,19 +293,41 @@ public final class EditorActivity extends Activity {
     }
     void pushUndo(String snapshot){undo.addLast(snapshot);while(undo.size()>30)undo.removeFirst();redo.clear();}
     TextView compactButton(String title,String description,View.OnClickListener listener){TextView b=button(title,listener);b.setPadding(dp(5),0,dp(5),0);b.setContentDescription(description);b.setTooltipText(description);return b;}
-    void jump(boolean end){EditProject.Clip c=clip();EditProject.Overlay o=overlay();long target=o!=null?(end?o.endMs:o.startMs):c==null?(end?project.durationMs():0):(end?project.placements().get(selected).endMs:project.placements().get(selected).startMs);seek(target);if(timeline!=null)timelineScroll.smoothScrollTo(Math.max(0,(int)timeline.x(target)-timelineScroll.getWidth()/2),0);}
+    void jump(boolean end){EditProject.Clip c=clip();EditProject.Overlay o=overlay();long target=o!=null?(end?o.endMs:o.startMs):c==null?(end?project.durationMs():0):(end?project.placements().get(selected).endMs:project.placements().get(selected).startMs);seek(target);}
     void updateJumpLabels(){String noun=clip()==null&&overlay()==null?"project":"selected clip";if(jumpStart!=null){jumpStart.setContentDescription("Jump to beginning of "+noun);jumpStart.setTooltipText(jumpStart.getContentDescription());jumpEnd.setContentDescription("Jump to end of "+noun);jumpEnd.setTooltipText(jumpEnd.getContentDescription());}}
     int timelineHeight(Configuration c,boolean wide){int normal=wide?(c.screenHeightDp<550?120:Math.min(280,Math.round(c.screenHeightDp*.28f))):(c.screenHeightDp>=780?200:160);return workspaceFocus==1?Math.min(normal+100,Math.round(c.screenHeightDp*.45f)):workspaceFocus==2?100:normal;}
     void chooseSpace(){new AlertDialog.Builder(this).setTitle("Workspace space").setSingleChoiceItems(new String[]{"Balanced","Expand timeline","Expand preview"},workspaceFocus,(d,i)->{if(uiLocked){tell("Unlock editing in Settings to change layout");return;}workspaceFocus=i;getSharedPreferences(PREFS,MODE_PRIVATE).edit().putInt("workspace-focus",i).apply();d.dismiss();buildWorkspace();}).setNegativeButton("Back",null).show();}
+    /** Display scale only; media timing never changes. The playhead stays centred, so zoom never jumps. */
     void zoomTimeline(float factor,float anchor){
-        if(timeline==null)return;float old=timeline.timelineScale();int scroll=timelineScroll.getScrollX();
-        if(Float.isNaN(anchor))anchor=Math.max(dp(64),Math.min(timelineScroll.getWidth()-dp(16),timeline.x(project.playheadMs)-scroll));
-        final float screen=anchor;double timeAtAnchor=(scroll+anchor-dp(64))/old;
-        pixelsPerSecond=Math.max(8,Math.min(2400,pixelsPerSecond*factor));final int next=(int)Math.round(dp(64)+timeAtAnchor*timeline.timelineScale()-screen);
-        timeline.requestLayout();timeline.invalidate();timelineScroll.post(()->timelineScroll.scrollTo(Math.max(0,next),0));
+        if(timeline==null||!Float.isFinite(factor)||factor<=0)return;pixelsPerSecond=Math.max(8,Math.min(2400,pixelsPerSecond*factor));
+        timeline.requestLayout();timeline.invalidate();timelineScroll.post(()->{if(timeline!=null)timeline.syncScroll();});
     }
-    java.util.List<Integer> lanes(){java.util.List<Integer> list=new ArrayList<>();list.add(0);for(int i=1;i<8;i++){final int t=i;if(project.clips.stream().anyMatch(c->c.track==t))list.add(i);}return list;}
-    View buildTimeline(){ScrollView vertical=new ScrollView(this);timelineScroll=new HorizontalScrollView(this){@Override public boolean onInterceptTouchEvent(MotionEvent e){return false;}};timelineScroll.setFillViewport(true);timelineScroll.setContentDescription("Timeline scroll");timeline=new TimelineCanvas();timelineScroll.setOnScrollChangeListener((v,x,y,oldX,oldY)->timeline.invalidate());vertical.setOnScrollChangeListener((v,x,y,oldX,oldY)->timeline.invalidate());timelineScroll.addView(timeline,new HorizontalScrollView.LayoutParams(-2,dp(40+lanes().size()*52+56)));vertical.addView(timelineScroll);return vertical;}
+    /** Fit Entire Project: the whole project is visible without moving the playhead. */
+    void fitTimeline(){
+        if(timeline==null)return;long reach=Math.max(project.playheadMs,project.durationMs()-project.playheadMs);float half=(timeline.viewport()-timeline.headerWidth())/2f-dp(16);
+        if(reach<=0)return;pixelsPerSecond=Math.max(8,Math.min(2400,half/dp(1)/(reach/1000f)));timeline.requestLayout();timelineScroll.post(()->timeline.syncScroll());
+    }
+    /** Zoom to Selection: frames the selected layers around the playhead (moved to the selection start if outside). */
+    void zoomToSelection(){
+        if(timeline==null)return;long start=Long.MAX_VALUE,end=0;for(int i:selectedClips()){EditProject.Placement pl=project.placements().get(i);start=Math.min(start,pl.startMs);end=Math.max(end,pl.endMs);}
+        for(int i:selectedOverlays()){EditProject.Overlay o=project.overlays.get(i);start=Math.min(start,o.startMs);end=Math.max(end,o.endMs);}
+        if(start==Long.MAX_VALUE){tell("Select a layer to zoom to it.");return;}
+        if(project.playheadMs<start||project.playheadMs>end)seek(start);long reach=Math.max(project.playheadMs-start,end-project.playheadMs);
+        float half=(timeline.viewport()-timeline.headerWidth())/2f-dp(16);pixelsPerSecond=Math.max(8,Math.min(2400,half/dp(1)/(Math.max(100,reach)/1000f)));timeline.requestLayout();timelineScroll.post(()->timeline.syncScroll());
+    }
+    void toggleMarkerAt(long time){if(!editable())return;long tolerance=Math.max(1,Math.round(dp(6)*1000/timeline.timelineScale()));edit("Marker toggled",()->LayerOps.toggleMarker(project,Math.max(0,time),tolerance));}
+    /** Row-handle reordering: moves one row to the target position, one swap at a time, in one undo step. */
+    void reorderRows(int from,int to){
+        java.util.List<int[]> rows=layerRows();if(from<0||to<0||from>=rows.size()||to>=rows.size())return;int[] row=rows.get(from),target=rows.get(to);
+        if(row[0]!=target[0]||(row[0]==0&&((row[1]<4)!=(target[1]<4)||target[1]==0))){tell(row[0]==1?"Text, shape and image layers stay above video layers.":"Reorder within visual layers 1–3 or audio layers; the main sequence stays at the bottom.");return;}
+        if(!editable())return;
+        edit("Layer order changed",()->{
+            if(row[0]==1){LayerOps.moveOverlay(project,row[1],target[1]);selectedOverlay=-1;}
+            else if(row[1]<4){int step=target[1]>row[1]?1:-1;for(int t=row[1];t!=target[1];t+=step){if(project.tracks[t].locked||project.tracks[t+step].locked)throw new IllegalArgumentException("Unlock the layers to reorder them.");LayerOps.swapTracks(project,t,t+step);}}
+            else{int step=target[1]>row[1]?1:-1;for(int t=row[1];t!=target[1];t+=step)LayerOps.swapTracks(project,t,t+step);}
+        });
+    }
+    View buildTimeline(){ScrollView vertical=new ScrollView(this);timelineScroll=new HorizontalScrollView(this){@Override public boolean onInterceptTouchEvent(MotionEvent e){return false;}};timelineScroll.setFillViewport(true);timelineScroll.setContentDescription("Timeline scroll");timeline=new TimelineView(this);timelineScroll.setOnScrollChangeListener((v,x,y,oldX,oldY)->timeline.invalidate());vertical.setOnScrollChangeListener((v,x,y,oldX,oldY)->timeline.invalidate());timelineScroll.addView(timeline,new HorizontalScrollView.LayoutParams(-2,Math.round(timeline.contentHeight())));timelineScroll.setHorizontalScrollBarEnabled(false);timelineScroll.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{if(r-l!=or-ol)timelineScroll.post(()->{if(timeline!=null){timeline.requestLayout();timeline.syncScroll();}});});vertical.addView(timelineScroll);return vertical;}
     EditProject.Clip clip(){return selected<0||selected>=project.clips.size()?null:project.clips.get(selected);}
     void renderInspector() {
         if(inspector==null)return;if(selected>=0)selectedOverlay=-1;pruneSelection();renderHeader();updateMediaSelection();if(timeline!=null)timeline.invalidate();if(previewControls!=null)previewControls.invalidate();updateJumpLabels();inspector.removeAllViews();contextualRow=null;contextualCount=0;gridRow=null;gridCount=0;
@@ -539,7 +566,7 @@ public final class EditorActivity extends Activity {
         if(attributes.categories==0){tell("Nothing to save for this layer.");return;}
         numberDialog("Preset name",kind.equals(PresetStore.ANIMATION)?"My animation":"My look",name->{presets.save(name,kind,attributes.encode());tell("Preset saved");renderInspector();});
     }
-    void deletePreset(PresetStore.Preset preset){new AlertDialog.Builder(this).setTitle("Delete “"+preset.name+"”?").setPositiveButton("Delete",(d,w)->{try{presets.delete(preset.id);renderInspector();}catch(IOException e){tell(e.getMessage());}}).setNegativeButton("Cancel",null).show();}
+    void deletePreset(PresetStore.Preset preset){new AlertDialog.Builder(this).setTitle("Delete “"+preset.name+"”?").setPositiveButton("Delete",(d,w)->{try{presets.delete(preset.id);renderInspector();}catch(IllegalArgumentException e){tell(e.getMessage());}}).setNegativeButton("Cancel",null).show();}
     void saveElement(){
         java.util.List<Integer> clips=new ArrayList<>(),overlays=new ArrayList<>();for(int i:selectedClips())if(project.clips.get(i).track<4)clips.add(i);overlays.addAll(selectedOverlays());
         if(clips.isEmpty()&&overlays.isEmpty()){tell("Select visual layers to save as an element.");return;}
@@ -820,99 +847,6 @@ public final class EditorActivity extends Activity {
                 invalidate();return true;}
             if(a==MotionEvent.ACTION_UP){if(moved&&target==clip()&&targetOverlay==overlay()){float[] values={px,py,scale,rotation};EditProject.Clip c=target;EditProject.Overlay o=targetOverlay;if(o!=null){edit("Overlay transform updated",()->{for(int i=0;i<4;i++)if(i==3||!o.motion.curves.get(i).isEmpty())o.motion.put(i,new Motion.Key(sourceTime,values[i]));else{if(i==0)o.x=values[i];if(i==1)o.y=values[i];if(i==2)o.scale=values[i];}});}else edit("Transform updated",()->{for(int i=0;i<4;i++)if(!c.motion.curves.get(i).isEmpty())c.motion.put(i,new Motion.Key(sourceTime,values[i]));else{if(i==0)c.x=values[i];if(i==1)c.y=values[i];if(i==2)c.scale=values[i];if(i==3)c.rotation=values[i];}});}gesture=0;getParent().requestDisallowInterceptTouchEvent(false);invalidate();performClick();return true;}
             if(a==MotionEvent.ACTION_CANCEL){gesture=0;getParent().requestDisallowInterceptTouchEvent(false);invalidate();}return true;
-        }
-        @Override public boolean performClick(){super.performClick();return true;}
-    }
-    final class TimelineCanvas extends View {
-        private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Rect visibleBounds=new Rect();
-        private final RectF thumbnailBounds=new RectF();
-        private float downX,downY,lastRawX,lastRawY;private boolean dragging,gutterTouch,pinching,moved;
-        private int operation,hit=-1,hitOverlay=-1;private long pendingDelta,guide=-1;private EditProject.Placement original;private EditProject.Overlay originalOverlay;
-        private final ScaleGestureDetector pinch;
-        TimelineCanvas(){super(EditorActivity.this);setContentDescription("Timeline: tap to select; drag selected clip or handles; drag empty space to scroll; pinch to zoom");setFocusable(true);
-            pinch=new ScaleGestureDetector(EditorActivity.this,new ScaleGestureDetector.SimpleOnScaleGestureListener(){
-                public boolean onScaleBegin(ScaleGestureDetector d){pinching=true;operation=0;pendingDelta=0;guide=-1;return true;}
-                public boolean onScale(ScaleGestureDetector d){zoomTimeline(d.getScaleFactor(),d.getFocusX()-timelineScroll.getScrollX());return true;}
-            });
-        }
-        private float timelineScale(){return Math.min(dp(pixelsPerSecond),16_000_000f/Math.max(1f,project.durationMs()/1000f));}
-        private float x(long ms){return dp(64)+ms/1000f*timelineScale();}
-        @Override protected void onMeasure(int w,int h){setMeasuredDimension(View.resolveSize(Math.max(dp(280),(int)x(project.durationMs())+dp(120)),w),View.MeasureSpec.getSize(h));}
-        @Override protected void onDraw(Canvas canvas){
-            canvas.getClipBounds(visibleBounds);visibleBounds.left=timelineScroll.getScrollX();visibleBounds.right=Math.min(getWidth(),visibleBounds.left+timelineScroll.getWidth());if(timelineScroll.getParent() instanceof ScrollView){ScrollView viewport=(ScrollView)timelineScroll.getParent();visibleBounds.top=viewport.getScrollY();visibleBounds.bottom=Math.min(getHeight(),visibleBounds.top+viewport.getHeight());}canvas.drawColor(PANEL);int height=getHeight();float mainY=dp(35),clipH=dp(48);java.util.List<Integer> laneList=lanes();
-            paint.setTextSize(dp(10));paint.setTypeface(Typeface.DEFAULT);paint.setColor(MUTED);
-            double interval=TimelineEdits.rulerStep(timelineScale(),dp(52))*1000;
-            long firstTick=(long)Math.max(0,Math.floor((visibleBounds.left-dp(64))/timelineScale()*1000/interval));
-            long last=(long)Math.ceil((visibleBounds.right-dp(64))/timelineScale()*1000/interval);
-            for(long tick=firstTick;tick<=last;tick++){long ms=Math.round(tick*interval);float xx=x(ms);String label=interval<500?String.format(Locale.US,"%.2fs",ms/1000d):String.format(Locale.US,"%.1fs",ms/1000d);canvas.drawText(label,xx,dp(16),paint);canvas.drawLine(xx,dp(21),xx,height,paint);}
-            if(timelineScale()/30>=dp(6)){paint.setColor(0xFF345465);long f0=(long)Math.max(0,Math.floor((visibleBounds.left-dp(64))/timelineScale()*30)),f1=(long)Math.ceil((visibleBounds.right-dp(64))/timelineScale()*30);for(long f=f0;f<=f1;f++){float xx=x(Math.round(f*1000d/30));canvas.drawLine(xx,dp(24),xx,dp(31),paint);}}
-            java.util.List<EditProject.Placement> placements=project.placements();
-            for(EditProject.Placement p:placements){mainY=dp(35+laneList.indexOf(p.clip.track)*52);float left=x(p.startMs),right=x(p.endMs);if(right<=visibleBounds.left||left>=visibleBounds.right||mainY+clipH<=visibleBounds.top||mainY>=visibleBounds.bottom)continue;paint.setColor(p.index==selected?0xFF226D99:0xFF204057);canvas.drawRoundRect(left,mainY,right,mainY+clipH,dp(5),dp(5),paint);
-                if(p.clip.track<4){Bitmap thumb=thumbnails.get(p.clip,timelineThumbnailsReady);if(thumb!=null){canvas.save();canvas.clipRect(left+dp(1),mainY+dp(1),right-dp(1),mainY+clipH-dp(1));float tw=clipH*thumb.getWidth()/thumb.getHeight();float first=left+Math.max(0,(float)Math.floor((visibleBounds.left-left)/tw))*tw;for(float tx=first;tx<Math.min(right,visibleBounds.right);tx+=tw){thumbnailBounds.set(tx,mainY,tx+tw,mainY+clipH);canvas.drawBitmap(thumb,null,thumbnailBounds,paint);}paint.setColor(0xAA08131F);canvas.drawRect(left,mainY+clipH-dp(21),right,mainY+clipH,paint);canvas.restore();}}
-                paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(p.index==selected?2:1));paint.setColor(p.index==selected?CYAN:0xFF3B677C);canvas.drawRoundRect(left,mainY,right,mainY+clipH,dp(5),dp(5),paint);paint.setStyle(Paint.Style.FILL);
-                canvas.save();canvas.clipRect(left+dp(4),mainY,right-dp(3),mainY+clipH);paint.setColor(TEXT);paint.setTextSize(dp(11));canvas.drawText(p.clip.name,left+dp(7),mainY+clipH-dp(6),paint);canvas.restore();
-                float[] peaks=waveforms.get(p.clip.uri);if(peaks!=null){paint.setColor(0xFF74D3C1);for(float xx=Math.max(left,visibleBounds.left);xx<Math.min(right,visibleBounds.right);xx+=dp(3)){long source=p.clip.inMs+(long)((xx-left)/(right-left)*(p.clip.outMs-p.clip.inMs));int bin=(int)Math.min(511,source*512/Math.max(1,p.clip.sourceDurationMs));float amplitude=peaks[Math.max(0,bin)]*dp(10);canvas.drawLine(xx,mainY+clipH/2-amplitude,xx,mainY+clipH/2+amplitude,paint);}}
-                if(p.outgoingMs>0){paint.setColor(0x9940BFFF);canvas.drawRect(x(p.endMs-p.outgoingMs),mainY,right,mainY+clipH,paint);}
-                if(p.index==selected){paint.setColor(CYAN);float handle=Math.min(dp(7),Math.max(dp(2),(right-left)/4));canvas.drawRect(left,mainY,left+handle,mainY+clipH,paint);canvas.drawRect(right-handle,mainY,right,mainY+clipH,paint);}
-            }
-            if(operation!=0&&original!=null&&moved){float yy=dp(35+laneList.indexOf(original.clip.track)*52),left=x(original.startMs+(operation==1||operation==3?pendingDelta:0)),right=x(original.endMs+(operation==2||operation==3?pendingDelta:0));paint.setColor(0x5540BFFF);canvas.drawRect(left,yy,right,yy+clipH,paint);paint.setColor(CYAN);paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(2));canvas.drawRect(left,yy,right,yy+clipH,paint);paint.setStyle(Paint.Style.FILL);paint.setTextSize(dp(11));long length=original.clip.durationMs()+(operation==1?-pendingDelta:operation==2?pendingDelta:0);canvas.drawText(seconds(length)+" s",Math.max(visibleBounds.left+dp(64),left),yy+dp(20),paint);}
-            if(guide>=0){paint.setColor(0xFF9FEAFF);paint.setStrokeWidth(dp(1));canvas.drawLine(x(guide),0,x(guide),height,paint);}
-            paint.setColor(MUTED);paint.setTextSize(dp(10));if(placements.isEmpty())canvas.drawText("IMPORT MEDIA TO BUILD YOUR TIMELINE",dp(64),mainY+dp(23),paint);
-            float overlayY=dp(35+laneList.size()*52+4);
-            for(EditProject.Overlay o:project.overlays){boolean chosen=o==overlay();long delta=chosen&&operation>=4?pendingDelta:0;float left=x(o.startMs+(operation==4||operation==6?delta:0)),right=x(o.endMs+(operation==5||operation==6?delta:0));paint.setColor(chosen?0xFF325C79:0xFF72549B);canvas.drawRoundRect(left,overlayY,right,overlayY+dp(22),dp(3),dp(3),paint);if(chosen){paint.setColor(CYAN);paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(2));canvas.drawRect(left,overlayY,right,overlayY+dp(22),paint);paint.setStyle(Paint.Style.FILL);canvas.drawRect(left,overlayY,left+dp(6),overlayY+dp(22),paint);canvas.drawRect(right-dp(6),overlayY,right,overlayY+dp(22),paint);}canvas.save();canvas.clipRect(left+dp(8),overlayY,right-dp(8),overlayY+dp(22));paint.setColor(TEXT);canvas.drawText(o.imageUri==null?o.text:"Image",left+dp(9),overlayY+dp(15),paint);canvas.restore();}
-            if(project.overlays.isEmpty()){paint.setColor(MUTED);canvas.drawText("OVERLAYS",dp(12),overlayY+dp(15),paint);}
-            float audioY=overlayY+dp(28);
-            if(project.music!=null){paint.setColor(0xFF277A79);long end=project.music.loop?project.durationMs():Math.min(project.durationMs(),project.music.startMs+project.music.outMs-project.music.inMs);canvas.drawRoundRect(x(project.music.startMs),audioY,x(end),audioY+dp(22),dp(3),dp(3),paint);paint.setColor(TEXT);canvas.drawText("♫  "+project.music.name,x(project.music.startMs)+dp(5),audioY+dp(15),paint);}
-            else{paint.setColor(MUTED);canvas.drawText("MUSIC",dp(12),audioY+dp(15),paint);}
-            paint.setColor(CYAN);paint.setStrokeWidth(dp(2));canvas.drawLine(x(project.playheadMs),0,x(project.playheadMs),height,paint);
-            // Track labels remain pinned while the clips scroll horizontally.
-            float gutter=visibleBounds.left;paint.setColor(BG);canvas.drawRect(gutter,0,gutter+dp(56),height,paint);
-            paint.setColor(MUTED);paint.setTextSize(dp(10));
-            for(int row=0;row<laneList.size();row++){int lane=laneList.get(row);float y=dp(35+row*52);canvas.drawText(lane<4?"Video":"Audio",gutter+dp(5),y+dp(18),paint);canvas.drawText(lane<4?"V"+lane:"A"+(lane-3),gutter+dp(5),y+dp(34),paint);}
-            canvas.drawText("Overlay",gutter+dp(5),overlayY+dp(15),paint);canvas.drawText("Music",gutter+dp(5),audioY+dp(15),paint);
-            paint.setColor(0xFF263A48);canvas.drawLine(gutter+dp(56),0,gutter+dp(56),height,paint);
-        }
-        @Override public boolean onGenericMotionEvent(MotionEvent event){if(event.getAction()==MotionEvent.ACTION_SCROLL){float wheel=event.getAxisValue(MotionEvent.AXIS_VSCROLL);if((event.getMetaState()&KeyEvent.META_CTRL_ON)!=0)zoomTimeline(wheel>0?1.2f:1/1.2f,event.getX()-timelineScroll.getScrollX());else timelineScroll.smoothScrollBy((int)(-wheel*dp(70)),0);return true;}return super.onGenericMotionEvent(event);}
-        private int hitClip(float xx,float yy){if(yy<dp(35))return -1;int row=(int)((yy-dp(35))/dp(52));if(row>=lanes().size())return -1;java.util.List<EditProject.Placement> ps=project.placements();for(int i=ps.size()-1;i>=0;i--){EditProject.Placement p=ps.get(i);if(p.clip.track==lanes().get(row)&&xx>=x(p.startMs)-dp(8)&&xx<=x(p.endMs)+dp(8))return p.index;}return -1;}
-        @Override public boolean onTouchEvent(android.view.MotionEvent event){
-            int action=event.getActionMasked();pinch.onTouchEvent(event);
-            if(action==MotionEvent.ACTION_DOWN){downX=event.getX();downY=event.getY();lastRawX=event.getRawX();lastRawY=event.getRawY();moved=false;pinching=false;operation=0;pendingDelta=0;guide=-1;original=null;gutterTouch=downX<timelineScroll.getScrollX()+dp(56);dragging=!gutterTouch&&downY<dp(32);hit=gutterTouch?-1:hitClip(downX,downY);if(!gutterTouch&&clip()!=null){EditProject.Placement chosen=project.placements().get(selected);float yy=dp(35+lanes().indexOf(chosen.clip.track)*52);if(downY>=yy&&downY<=yy+dp(48)&&Math.min(Math.abs(downX-x(chosen.startMs)),Math.abs(downX-x(chosen.endMs)))<=dp(16))hit=selected;}getParent().requestDisallowInterceptTouchEvent(true);
-                hitOverlay=-1;originalOverlay=null;float overlayY=dp(35+lanes().size()*52+4);if(!gutterTouch&&downY>=overlayY&&downY<=overlayY+dp(22)){long t=Math.round((downX-dp(64))/timelineScale()*1000);for(int i=project.overlays.size()-1;i>=0;i--){EditProject.Overlay o=project.overlays.get(i);if(t>=o.startMs&&t<=o.endMs){hitOverlay=i;break;}}}
-                if(hitOverlay>=0&&hitOverlay==selectedOverlay&&selected<0&&!uiLocked&&!loading&&!importing&&!exporting()){originalOverlay=project.overlays.get(hitOverlay);float dl=Math.abs(downX-x(originalOverlay.startMs)),dr=Math.abs(downX-x(originalOverlay.endMs));operation=Math.min(dl,dr)<=dp(16)?(dl<dr?4:5):6;}
-                if(hit==selected&&hit>=0&&!uiLocked&&!loading&&!importing&&!exporting()){
-                    original=project.placements().get(hit);float dl=Math.abs(downX-x(original.startMs)),dr=Math.abs(downX-x(original.endMs));operation=Math.min(dl,dr)<=dp(16)?(dl<dr?1:2):3;
-                }
-                if(event.isButtonPressed(MotionEvent.BUTTON_SECONDARY)){selected=hit;selectedOverlay=hitOverlay;tab=1;renderInspector();operation=0;}
-                return true;
-            }
-            if(event.getPointerCount()>1){pinching=true;operation=0;pendingDelta=0;guide=-1;invalidate();return true;}
-            if(action==MotionEvent.ACTION_MOVE&&!pinching){
-                moved|=Math.hypot(event.getX()-downX,event.getY()-downY)>dp(5);
-                long target=Math.round((event.getX()-dp(64))/timelineScale()*1000);
-                if(dragging){seek(target);return true;}
-                if(operation>=4&&moved){pendingDelta=Math.round((event.getX()-downX)/timelineScale()*1000);long anchor=operation==5?originalOverlay.endMs:originalOverlay.startMs;guide=-1;if(snapping){long snapped=TimelineEdits.snap(project,-1,anchor+pendingDelta,Math.round(dp(8)*1000/timelineScale()));if(snapped!=anchor+pendingDelta)guide=snapped;pendingDelta=snapped-anchor;}long old=pendingDelta;pendingDelta=Math.max(operation==5?originalOverlay.startMs+100-originalOverlay.endMs:-originalOverlay.startMs,pendingDelta);if(operation==4)pendingDelta=Math.min(originalOverlay.endMs-originalOverlay.startMs-100,pendingDelta);if(pendingDelta!=old)guide=-1;invalidate();return true;}
-                if(operation!=0&&moved){
-                    pendingDelta=Math.round((event.getX()-downX)/timelineScale()*1000);guide=-1;
-                    long anchor=operation==2?original.endMs:original.startMs,desired=anchor+pendingDelta;
-                    if(snapping){long tolerance=Math.round(dp(8)*1000/timelineScale());long snapped=TimelineEdits.snap(project,selected,desired,tolerance);if(snapped==desired&&operation==3){long end=original.endMs+pendingDelta;long endSnap=TimelineEdits.snap(project,selected,end,tolerance);if(endSnap!=end){snapped=desired+endSnap-end;guide=endSnap;}}else if(snapped!=desired)guide=snapped;pendingDelta=snapped-anchor;}
-                    long beforeClamp=pendingDelta;
-                    if(operation==1){long min=original.clip.image?-7_200_000_000L:Math.round(-original.clip.inMs/original.clip.speed);if(original.clip.track>0)min=Math.max(min,-original.startMs);pendingDelta=Math.max(min,Math.min(original.clip.durationMs()-100,pendingDelta));}
-                    if(operation==2)pendingDelta=Math.max(100-original.clip.durationMs(),Math.min(original.clip.image?7_200_000_000L-original.clip.outMs:Math.round((original.clip.sourceDurationMs-original.clip.outMs)/original.clip.speed),pendingDelta));
-                    if(operation==3)pendingDelta=Math.max(-original.startMs,pendingDelta);if(pendingDelta!=beforeClamp)guide=-1;
-                    invalidate();return true;
-                }
-                if(moved){timelineScroll.scrollBy(Math.round(lastRawX-event.getRawX()),0);((ScrollView)timelineScroll.getParent()).scrollBy(0,Math.round(lastRawY-event.getRawY()));lastRawX=event.getRawX();lastRawY=event.getRawY();}return true;
-            }
-            if(action==MotionEvent.ACTION_UP){
-                if(!pinching&&!gutterTouch){
-                    if(operation!=0&&moved&&pendingDelta!=0){int op=operation;long delta=pendingDelta;EditProject.Placement origin=original;
-                        edit(op==3||op==6?"Clip moved":"Trim applied",()->{if(op>=4){if(op==4||op==6)originalOverlay.startMs+=delta;if(op==5||op==6)originalOverlay.endMs+=delta;}else if(op<3)TimelineEdits.edge(project,selected,op==1,delta);else if(origin.clip.track>0)project.setPlacement(selected,origin.clip.track,origin.startMs+delta);else{int destination=selected;long center=origin.startMs+delta+origin.clip.durationMs()/2;for(EditProject.Placement p:project.placements())if(p.clip.track==0&&p.index!=selected&&center>=p.startMs&&center<=p.endMs)destination=p.index;project.move(selected,destination-selected);selected=destination;}});
-                    }else if(!moved){if(!dragging){selected=hit;selectedOverlay=hitOverlay;tab=1;renderInspector();}seek(Math.round((event.getX()-dp(64))/timelineScale()*1000));performClick();}
-                }
-                operation=0;guide=-1;pendingDelta=0;dragging=false;pinching=false;getParent().requestDisallowInterceptTouchEvent(false);invalidate();return true;
-            }
-            if(action==MotionEvent.ACTION_CANCEL){operation=0;guide=-1;pendingDelta=0;dragging=false;pinching=false;getParent().requestDisallowInterceptTouchEvent(false);invalidate();}return true;
         }
         @Override public boolean performClick(){super.performClick();return true;}
     }

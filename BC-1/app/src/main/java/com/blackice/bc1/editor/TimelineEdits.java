@@ -42,9 +42,18 @@ public final class TimelineEdits {
             }
         return target;
     }
-    public static double rulerStep(double pixelsPerSecond,double minimumPixels) {
-        double[] steps={1d/30,1d/15,1d/6,.5,1,2,5,10,15,30,60,120,300,600,1800,3600};
+    public static double rulerStep(double pixelsPerSecond,double minimumPixels) {return rulerStep(pixelsPerSecond,minimumPixels,30);}
+    /** Coarse zoom labels whole seconds; closer views step to half seconds, then frames of the project rate. */
+    public static double rulerStep(double pixelsPerSecond,double minimumPixels,int fps) {
+        double[] steps={1d/fps,2d/fps,5d/fps,10d/fps,.5,1,2,5,10,15,30,60,120,300,600,1800,3600};
         for(double step:steps)if(step*pixelsPerSecond>=minimumPixels)return step;
         return 3600*Math.ceil(minimumPixels/pixelsPerSecond/3600);
+    }
+    /** "4.0" / "1.5" seconds at second and half-second steps; "1s 12f" at frame steps; m:ss beyond a minute. */
+    public static String rulerLabel(long ms,double stepSeconds,int fps) {
+        if(stepSeconds>=60) return String.format(java.util.Locale.US,"%d:%02d",ms/60000,(ms/1000)%60);
+        if(stepSeconds>=.5) return String.format(java.util.Locale.US,"%.1f",ms/1000d);
+        long frames=Math.round(ms*fps/1000.0);
+        return frames%fps==0?(frames/fps)+"s":(frames/fps)+"s "+(frames%fps)+"f";
     }
 }
