@@ -11,6 +11,8 @@ adb install -r BC-1/app/build/outputs/apk/androidTest/debug/app-debug-androidTes
 adb logcat -c
 adb shell am instrument -w -r com.blackice.bc1.preview.test/androidx.test.runner.AndroidJUnitRunner | tee BC-1/app/build/reports/androidTests/instrumentation.txt
 adb logcat -d > BC-1/app/build/reports/androidTests/logcat.txt
+# Artifacts are not always retrievable, so surface export failures directly in the job log.
+rg -n -B5 -A60 'BC1Export|MuxerException|Muxer error' BC-1/app/build/reports/androidTests/logcat.txt | head -400 || true
 mkdir -p BC-1/app/build/reports/androidTests/qa
 adb exec-out run-as com.blackice.bc1.preview tar -C files/qa -cf - . > BC-1/app/build/reports/androidTests/qa.tar
 tar -xf BC-1/app/build/reports/androidTests/qa.tar -C BC-1/app/build/reports/androidTests/qa
