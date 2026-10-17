@@ -34,7 +34,19 @@ versionName 2.0.0 / versionCode 17, package `com.blackice.bc1.preview`. Not publ
 
 ## Verification
 
-_Filled in from the qualifying CI run._
+Qualifying source `03dd1ce582954ebb0496876ff142b5f8daa02079`, [Actions run 39022975446](https://github.com/uran39281-bit/Black-Ice-Emulator/actions/runs/39022975446): build and GPU jobs both passed.
+
+- 76 JVM unit tests (0 failures), lint with 0 errors, debug APK and test APK built. New unit coverage: schema 3 → 4 migration and round trip; layer visibility / solo rules; atomic multi-move, align, match duration (source limits), duplicate above / after, close gaps, trim to playhead, track reordering, groups, markers and marker snapping; forward / inverse transform maths, anchor-preserving placement, Fit / Fill / Original Size, alignment and offscreen detection; keyframe states, set / toggle / move / copy / paste / delete, easing presets, bulk key operations, animation presets; selective attribute copy with retimed animation; ruler steps and labels; beat detection.
+- 25 Android instrumentation tests on the API 35 emulator (`OK (25 tests)`), including:
+  - `LayerRenderingTest` renders real compositions and decodes pixels: an anchored, half-scale layer fills exactly the right half (matching the preview box's TransformMath prediction), text/shape layers render above video, hidden video and overlay layers stay hidden in export, solo is ignored in export and isolates the soloed layer in preview.
+  - `WorkspaceV2Test` on phone 9:16 and DeX 16:9: + Add drawer categories and insertion at the playhead, contextual top bar, shape tools, Opacity focused panel, keyframe diamond enabling animation and a second key from an animated edit, Back keeping selection and playhead, per-layer lock blocking duplicate and movement (separate from the workspace lock), arrow-pixel nudge, delete + undo, text layers, multi-select and grouping, eye toggle, solo, save and reopen.
+  - `TimelineInteractionTest` on phone and DeX: centred playhead, tap-select, half-second picture trim by handle, undo / redo, cancelled trim, empty-space deselect, empty-space scrubbing that keeps the timeline under the centred playhead, zoom, pinch, preview drag + undo, save / reopen, audio and text tool sets.
+  - Existing v1.x suites (workspace layouts, media browser, thumbnails, diagnostics, GPU effects / transitions, export and recovery) still pass.
+- All four independent ffmpeg / ffprobe gates passed (three sequential H.264 1920×1080 + AAC exports and the post-failure recovery export), plus the synchronized five-second speed-change export.
+- Screenshots (phone and DeX: Add drawer, Move & Transform, Layers, timeline selection and text tools) were reviewed from the `qa-screenshots/claude/app-update-4vo05i` branch the CI publishes.
+- APK artifact `BC-1-v2.0.0-apk` (ID 12097152536, zip SHA256 `1628e0cafbbbbd0728f46ef30347b67ca2eb96ff423d5abfba598cae07be117b`), debug-signed by CI.
+
+Found and fixed during qualification: a Media3 1.11 race where a second visual sequence starting with a picture requested synthetic silence before the shared audio output existed (NullPointerException in `SequenceAssetLoader`), which intermittently failed previews and exports with pictures on several layers. Only the first video sequence now carries audio; other layers' sound uses parallel audio-only sequences.
 
 ## Signing
 
