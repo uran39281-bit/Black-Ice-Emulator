@@ -197,7 +197,7 @@ public final class EditorActivity extends Activity {
             body.addView(rail,new LinearLayout.LayoutParams(dp(76),-1));
             if(c.screenWidthDp>=1100){int width=Math.min(340,Math.max(220,Math.round(c.screenWidthDp*.20f)));mediaColumns=width>=260?2:1;ScrollView library=new ScrollView(this);mediaBrowser=column();mediaBrowser.setPadding(dp(10),dp(10),dp(10),dp(10));library.addView(mediaBrowser);library.setBackgroundColor(PANEL);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(width),-1);lp.rightMargin=dp(6);body.addView(library,lp);renderMediaBrowser();}
             LinearLayout center=column();center.setPadding(dp(4),dp(4),dp(6),dp(4));body.addView(center,new LinearLayout.LayoutParams(0,-1,1));
-            center.addView(buildMonitor(),new LinearLayout.LayoutParams(-1,0,1));center.addView(transport());center.addView(buildTimeline(),new LinearLayout.LayoutParams(-1,dp(timelineHeight(c,true))));
+            center.addView(buildMonitor(),new LinearLayout.LayoutParams(-1,0,1));center.addView(transport(c.screenHeightDp<550));center.addView(buildTimeline(),new LinearLayout.LayoutParams(-1,dp(timelineHeight(c,true))));
             ScrollView tools=new ScrollView(this);tools.setFillViewport(false);inspector=column();inspector.setPadding(dp(10),dp(10),dp(10),dp(12));tools.addView(inspector);tools.setBackgroundColor(PANEL);
             View divider=new View(this);divider.setBackgroundColor(0xFF284B60);divider.setContentDescription("Drag to resize tool panel");body.addView(divider,new LinearLayout.LayoutParams(dp(8),-1));
             body.addView(tools,new LinearLayout.LayoutParams(dp(Math.min(inspectorWidth,c.screenWidthDp<1000?250:500)),-1));
@@ -210,7 +210,7 @@ public final class EditorActivity extends Activity {
             if(compact){ScrollView all=new ScrollView(this);all.setFillViewport(true);all.addView(content);root.addView(all,new LinearLayout.LayoutParams(-1,0,1));}
             else root.addView(content,new LinearLayout.LayoutParams(-1,0,1));
             content.addView(buildMonitor(),new LinearLayout.LayoutParams(-1,dp(workspaceFocus==1?110:workspaceFocus==2?280:c.screenHeightDp<780?170:210)));
-            content.addView(transport());content.addView(buildTimeline(),new LinearLayout.LayoutParams(-1,dp(timelineHeight(c,false))));
+            content.addView(transport(false));content.addView(buildTimeline(),new LinearLayout.LayoutParams(-1,dp(timelineHeight(c,false))));
             inspector=column();inspector.setPadding(dp(8),dp(10),dp(8),dp(14));
             if(compact)content.addView(inspector);else{ScrollView tools=new ScrollView(this);tools.addView(inspector);content.addView(tools,new LinearLayout.LayoutParams(-1,0,1));}
             LinearLayout tabs=row();String[] names={"Media","Edit","Effects","Layers","Setup"};
@@ -234,7 +234,7 @@ public final class EditorActivity extends Activity {
         previewControls=new PreviewControls();monitor.addView(previewControls,new FrameLayout.LayoutParams(-1,-1));
         return monitor;
     }
-    private View transport() {
+    private View transport(boolean singleRow) {
         LinearLayout controls=row();controls.setGravity(Gravity.CENTER_VERTICAL);
         controls.addView(compactButton("↶","Undo",v->undo(false)),new LinearLayout.LayoutParams(0,dp(48),1));
         jumpStart=compactButton("‹","Jump to beginning",v->jump(false));controls.addView(jumpStart,new LinearLayout.LayoutParams(0,dp(48),1));
@@ -254,6 +254,8 @@ public final class EditorActivity extends Activity {
                 public void onStopTrackingTouch(SeekBar slider){scrubbing=false;seek(slider.getProgress()*project.durationMs()/1000);}
             });transport.addView(previewScrubber,new LinearLayout.LayoutParams(-1,dp(28)));
         }
+        // Short wide windows keep playback and zoom on one row so the preview retains usable height.
+        if(singleRow){time.setTextSize(10);time.setMaxLines(2);LinearLayout combined=row();combined.setGravity(Gravity.CENTER_VERTICAL);combined.addView(controls,new LinearLayout.LayoutParams(0,dp(48),3));combined.addView(navigation,new LinearLayout.LayoutParams(0,dp(48),2));transport.addView(combined);return transport;}
         transport.addView(controls);transport.addView(navigation);return transport;
     }
     private View quickTools(){
