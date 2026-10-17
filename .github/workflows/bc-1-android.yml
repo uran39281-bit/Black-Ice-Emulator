@@ -41,7 +41,10 @@ jobs:
           path: BC-1/app/build/reports/
   gpu-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
+    # Write access is used only to publish reduced QA screenshots to a qa-screenshots/<branch> ref.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -71,3 +74,15 @@ jobs:
         with:
           name: BC-1-GPU-test-reports
           path: BC-1/app/build/reports/androidTests/
+      - name: Publish QA screenshots for review
+        if: always()
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          dir=BC-1/app/build/reports/androidTests/qa
+          ls "$dir"/*.png >/dev/null 2>&1 || exit 0
+          mkdir -p /tmp/shots
+          for f in "$dir"/*.png; do ffmpeg -v error -y -i "$f" -vf scale=540:-1 "/tmp/shots/$(basename "$f")" || true; done
+          cd /tmp/shots && git init -q && git checkout -q -b qa && git add . \
+            && git -c user.name=bc1-ci -c user.email=bc1-ci@users.noreply.github.com commit -qm "QA screenshots for $GITHUB_SHA (run $GITHUB_RUN_ID)" \
+            && git push -qf "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "qa:refs/heads/qa-screenshots/${GITHUB_REF_NAME}"
