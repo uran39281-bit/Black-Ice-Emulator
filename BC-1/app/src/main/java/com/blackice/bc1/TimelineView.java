@@ -209,9 +209,8 @@ final class TimelineView extends View {
     private float contentX(float rawX){int[] loc=new int[2];getLocationOnScreen(loc);return rawX-loc[0];}
     private void updateDrag(float rawX){
         lastRawX=rawX;float xx=contentX(rawX);EditProject p=a.project;long tol=Math.round(a.dp(8)*1000/timelineScale());
-        pendingDelta=time(xx)-time(downX)+(a.project.playheadMs-startPlayhead);guide=-1;
-        // While auto-scrolling, the content moved under a stationary finger: account for that shift.
-        pendingDelta=Math.round((xx-(downX+(a.project.playheadMs-startPlayhead)/1000f*timelineScale()))/timelineScale()*1000)+(a.project.playheadMs-startPlayhead);
+        // Content coordinates already include any auto-scroll since the drag began.
+        pendingDelta=time(xx)-time(downX);guide=-1;
         if(operation==OP_MULTI){long earliest=Long.MAX_VALUE;for(int i:a.selectedClips())earliest=Math.min(earliest,p.placements().get(i).startMs);for(int i:a.selectedOverlays())earliest=Math.min(earliest,p.overlays.get(i).startMs);
             if(a.snapping){long snapped=TimelineEdits.snap(p,-1,earliest+pendingDelta,tol);if(snapped!=earliest+pendingDelta)guide=snapped;pendingDelta=snapped-earliest;}pendingDelta=Math.max(-earliest,pendingDelta);invalidate();return;}
         if(operation>=OP_OV_START){long anchor=operation==OP_OV_END?originalOverlay.endMs:originalOverlay.startMs;if(a.snapping){long snapped=TimelineEdits.snap(p,-1,anchor+pendingDelta,tol);if(snapped!=anchor+pendingDelta)guide=snapped;pendingDelta=snapped-anchor;}

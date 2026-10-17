@@ -12,7 +12,7 @@ adb logcat -c
 adb shell am instrument -w -r com.blackice.bc1.preview.test/androidx.test.runner.AndroidJUnitRunner | tee BC-1/app/build/reports/androidTests/instrumentation.txt
 adb logcat -d > BC-1/app/build/reports/androidTests/logcat.txt
 # Artifacts are not always retrievable, so surface export failures directly in the job log.
-rg -n -B5 -A60 'BC1Export|MuxerException|Muxer error' BC-1/app/build/reports/androidTests/logcat.txt | head -400 || true
+rg -n -A40 'BC1Export\b|MuxerException|Muxer error' BC-1/app/build/reports/androidTests/logcat.txt | rg -v 'WindowManager|SplashScreen|TopTaskTracker|OptProp' | head -150 || true
 mkdir -p BC-1/app/build/reports/androidTests/qa
 adb exec-out run-as com.blackice.bc1.preview tar -C files/qa -cf - . > BC-1/app/build/reports/androidTests/qa.tar
 tar -xf BC-1/app/build/reports/androidTests/qa.tar -C BC-1/app/build/reports/androidTests/qa
@@ -24,6 +24,8 @@ for shot in BC-1/app/build/reports/androidTests/qa/v2-*.png BC-1/app/build/repor
   ffmpeg -v error -y -i "$shot" -vf scale=360:-1 -q:v 9 "/tmp/$name.jpg" || continue
   echo "BC1SHOT-BEGIN $name"; base64 -w 3000 "/tmp/$name.jpg"; echo "BC1SHOT-END $name"
 done
+# Repeat the instrumentation failure summary last, so it is visible at the end of the job log.
+sed -n '/^There w\(as\|ere\) [0-9]* failure/,/^FAILURES!!!/p' BC-1/app/build/reports/androidTests/instrumentation.txt | head -120 || true
 if rg 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed' BC-1/app/build/reports/androidTests/instrumentation.txt; then exit 1; fi
 rg '^OK \([0-9]+ tests?\)' BC-1/app/build/reports/androidTests/instrumentation.txt
 

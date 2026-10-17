@@ -31,7 +31,7 @@ jobs:
         run: gradle --no-daemon -Pbc1SideBySide testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
       - uses: actions/upload-artifact@v4
         with:
-          name: BC-1-v1.1.0-apk
+          name: BC-1-v2.0.0-apk
           path: BC-1/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
       - uses: actions/upload-artifact@v4
