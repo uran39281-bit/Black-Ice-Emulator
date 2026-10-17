@@ -16,6 +16,14 @@ rg -n -B5 -A60 'BC1Export|MuxerException|Muxer error' BC-1/app/build/reports/and
 mkdir -p BC-1/app/build/reports/androidTests/qa
 adb exec-out run-as com.blackice.bc1.preview tar -C files/qa -cf - . > BC-1/app/build/reports/androidTests/qa.tar
 tar -xf BC-1/app/build/reports/androidTests/qa.tar -C BC-1/app/build/reports/androidTests/qa
+# Artifact downloads are not always available to reviewers: print small JPEG copies of the v2
+# screenshots into the log (base64, chunked) so they can be reviewed from the job log alone.
+for shot in BC-1/app/build/reports/androidTests/qa/v2-*.png BC-1/app/build/reports/androidTests/qa/v11-*.png; do
+  [ -f "$shot" ] || continue
+  name=$(basename "$shot" .png)
+  ffmpeg -v error -y -i "$shot" -vf scale=360:-1 -q:v 9 "/tmp/$name.jpg" || continue
+  echo "BC1SHOT-BEGIN $name"; base64 -w 3000 "/tmp/$name.jpg"; echo "BC1SHOT-END $name"
+done
 if rg 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed' BC-1/app/build/reports/androidTests/instrumentation.txt; then exit 1; fi
 rg '^OK \([0-9]+ tests?\)' BC-1/app/build/reports/androidTests/instrumentation.txt
 

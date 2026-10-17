@@ -43,6 +43,7 @@ final class TransformPanel {
         mode.addView(precision,new LinearLayout.LayoutParams(0,a.dp(48),1));
         mode.addView(a.button("Reset All Transforms",v->resetAll()),new LinearLayout.LayoutParams(0,a.dp(48),1));
         into.addView(mode);
+        a.panels.keyNavigation();
         TransformMath.Transform t=current();
         switch(tab){
             case 0:position(into,t);break;

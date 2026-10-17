@@ -60,11 +60,11 @@ final class ToolPanels {
     static List<String> tools(EditProject.Clip c,EditProject.Overlay o){
         List<String> t=new ArrayList<>();
         if(c!=null&&c.track>=4){Collections.addAll(t,"Split","Trim","Slip","Volume","Fade In","Fade Out","Duplicate");return t;}
-        if(c!=null&&c.image){Collections.addAll(t,"Duration: "+EditorActivity.seconds(c.durationMs())+" s","Transform","Opacity","Effects","Chroma Key","Duplicate");return t;}
-        if(c!=null){Collections.addAll(t,"Split","Trim","Slip","Speed: "+trimZero(c.speed)+"×","Extract Audio","Transform","Opacity","Effects","Chroma Key","Volume","Duplicate");return t;}
-        if(o.imageUri==null&&o.shape==0){Collections.addAll(t,"Edit Text","Font","Size","Color","Alignment","Transform","Opacity","Duration: "+EditorActivity.seconds(o.endMs-o.startMs)+" s");return t;}
-        if(o.shape>0){Collections.addAll(t,"Color","Transform","Opacity","Duration: "+EditorActivity.seconds(o.endMs-o.startMs)+" s","Duplicate");return t;}
-        Collections.addAll(t,"Transform","Opacity","Duration: "+EditorActivity.seconds(o.endMs-o.startMs)+" s","Duplicate");return t;
+        if(c!=null&&c.image){Collections.addAll(t,"Duration: "+EditorActivity.seconds(c.durationMs())+" s","Transform","Opacity","Effects","Chroma Key","Animation","Duplicate");return t;}
+        if(c!=null){Collections.addAll(t,"Split","Trim","Slip","Speed: "+trimZero(c.speed)+"×","Extract Audio","Transform","Opacity","Effects","Chroma Key","Volume","Animation","Duplicate");return t;}
+        if(o.imageUri==null&&o.shape==0){Collections.addAll(t,"Edit Text","Font","Size","Color","Alignment","Transform","Opacity","Duration: "+EditorActivity.seconds(o.endMs-o.startMs)+" s","Animation");return t;}
+        if(o.shape>0){Collections.addAll(t,"Color","Transform","Opacity","Duration: "+EditorActivity.seconds(o.endMs-o.startMs)+" s","Animation","Duplicate");return t;}
+        Collections.addAll(t,"Transform","Opacity","Duration: "+EditorActivity.seconds(o.endMs-o.startMs)+" s","Animation","Duplicate");return t;
     }
     static String trimZero(float v){String s=String.format(Locale.US,"%.2f",v);return s.replaceAll("0+$","").replaceAll("\\.$","");}
     static List<String> categories(EditProject.Clip c,EditProject.Overlay o){
@@ -116,6 +116,7 @@ final class ToolPanels {
             case "Size":open("Size",()->percent("Size",o.scale/2f,.35f,v->o.scale=Math.max(.1f,v*2),o.motion,Motion.SCALE,2,.05f));return;
             case "Color":category("Color & Fill");return;
             case "Alignment":open("Alignment",this::alignmentPanel);return;
+            case "Animation":open("Animation",this::animationPanel);return;
         }
     }
     void category(String name){
@@ -342,7 +343,68 @@ final class ToolPanels {
         a.inspector.addView(a.button("+ Add media, audio, text or shapes",v->{a.tab=0;a.renderInspector();}));
         a.inspector.addView(a.button("Layers & visibility",v->{a.tab=3;a.renderInspector();}));
         a.inspector.addView(a.button((a.project.loopInMs>=0?"Clear loop range ":"Loop range…"),v->a.loopDialog()));
+        a.inspector.addView(a.button("Markers & beats",v->open("Markers & beats",this::markersPanel)));
+    }
+    // ---- Animation ---------------------------------------------------------------------------------
+    /** Timeline ms → this layer's key time, and back. */
+    long toMotion(long timeline){EditProject.Clip c=a.clip();EditProject.Overlay o=a.overlay();if(c!=null){EditProject.Placement p=a.project.placements().get(a.selected);return Math.max(0,c.inMs+Math.round((timeline-p.startMs)*c.speed));}return Math.max(0,timeline-o.startMs);}
+    long toTimeline(long motion){EditProject.Clip c=a.clip();EditProject.Overlay o=a.overlay();if(c!=null){EditProject.Placement p=a.project.placements().get(a.selected);return p.startMs+Math.round((motion-c.inMs)/(double)c.speed);}return o.startMs+motion;}
+    void keyNavigation(){
+        LinearLayout row=a.row();
+        row.addView(a.button("◆‹  Previous keyframe",v->a.jumpKeyframe(false)),new LinearLayout.LayoutParams(0,a.dp(48),1));
+        row.addView(a.button("Next keyframe  ›◆",v->a.jumpKeyframe(true)),new LinearLayout.LayoutParams(0,a.dp(48),1));
+        a.inspector.addView(row);
+    }
+    private void animationPanel(){
+        Motion m=a.selectedMotion();if(m==null)return;EditProject.Clip c=a.clip();EditProject.Overlay o=a.overlay();long t=motionTime(),tol=tolerance();
+        a.inspector.addView(a.note("◇ grey: not animated (edits change the static value) • ◇ blue: animated between keyframes • ◆ keyframe at the playhead. Keyframes follow the layer's content when it is moved, trimmed, split or duplicated."));
+        keyNavigation();
+        List<String> here=new ArrayList<>();for(int p=0;p<Motion.COUNT;p++)if(Keyframes.keyAt(m,p,t,tol)!=null)here.add(Motion.PROPERTIES[p]);
+        a.inspector.addView(a.label(here.isEmpty()?"No keyframe at the playhead":"Keyframes here: "+String.join(", ",here),12,EditorActivity.TEXT,true));
+        if(!here.isEmpty()){
+            a.inspector.addView(a.note("Easing from this keyframe to the next"));
+            for(int i=0;i<Keyframes.EASINGS.length;i++){final int preset=i;a.gridAction(Keyframes.EASINGS[i],()->{if(a.layerEditable())a.edit("Easing updated",()->Keyframes.easeAll(m,t,tol,Keyframes.curve(preset)));});}
+            a.gridAction("Custom curve…",()->open("Custom curve",this::curvePanel));a.flushGrid();
+            timeField("Move keyframes to (timeline seconds)",a.project.playheadMs,value->a.edit("Keyframes moved",()->Keyframes.moveAll(m,t,toMotion(value),tol)));
+            LinearLayout row=a.row();
+            row.addView(a.button("Snap to nearest marker",v->{if(!a.layerEditable())return;if(a.project.markers.isEmpty()){a.tell("Add markers first (Markers & beats).");return;}long best=a.project.markers.get(0);for(long mk:a.project.markers)if(Math.abs(mk-a.project.playheadMs)<Math.abs(best-a.project.playheadMs))best=mk;long target=best;a.edit("Keyframes snapped to marker",()->Keyframes.moveAll(m,t,toMotion(target),tol));a.seek(target);}),new LinearLayout.LayoutParams(0,a.dp(48),1));
+            row.addView(a.button("Delete keyframes here",v->{if(a.layerEditable())a.edit("Keyframes deleted",()->Keyframes.deleteAll(m,t,tol));}),new LinearLayout.LayoutParams(0,a.dp(48),1));
+            a.inspector.addView(row);
+        }
+        LinearLayout clip=a.row();clip.addView(a.button("Copy keyframes",v->a.copyKeys()),new LinearLayout.LayoutParams(0,a.dp(48),1));clip.addView(a.button("Paste at playhead",v->a.pasteKeys()),new LinearLayout.LayoutParams(0,a.dp(48),1));a.inspector.addView(clip);
+        a.inspector.addView(a.note("Properties"));
+        float[] current=currentValues();
+        int[] props=c!=null?new int[]{Motion.X,Motion.Y,Motion.SCALE,Motion.ROTATION,Motion.OPACITY,Motion.SKEW_X,Motion.SKEW_Y,Motion.ANCHOR_X,Motion.ANCHOR_Y,Motion.INTENSITY}:new int[]{Motion.X,Motion.Y,Motion.SCALE,Motion.ROTATION,Motion.OPACITY,Motion.SKEW_X,Motion.SKEW_Y,Motion.ANCHOR_X,Motion.ANCHOR_Y};
+        for(int p:props){LinearLayout row=a.row();row.setGravity(Gravity.CENTER_VERTICAL);row.addView(diamond(Motion.PROPERTIES[p],m,p,current[p]),new LinearLayout.LayoutParams(a.dp(48),a.dp(48)));
+            int state=Keyframes.state(m,p,t,tol);row.addView(a.label(Motion.PROPERTIES[p]+"  ·  "+(state==Keyframes.STATIC?"not animated":m.curves.get(p).size()+" keyframes"),12,state==Keyframes.STATIC?EditorActivity.MUTED:EditorActivity.TEXT,false),new LinearLayout.LayoutParams(0,-2,1));
+            row.addView(a.label(format(m.value(p,t,current[p])),12,EditorActivity.TEXT,true));a.inspector.addView(row);}
+        a.inspector.addView(a.note("Animation presets (use the layer's current values as the end state)"));
+        long start=toMotion(c!=null?a.project.placements().get(a.selected).startMs:o.startMs),end=toMotion(c!=null?a.project.placements().get(a.selected).endMs:o.endMs);
+        for(String preset:Keyframes.PRESETS)a.gridAction(preset,()->{if(a.layerEditable())a.edit(preset+" applied",()->Keyframes.preset(m,preset,start,end,currentValues()));});
+        a.flushGrid();
+        for(PresetStore.Preset saved:a.presets.list(PresetStore.ANIMATION))a.addAction("Saved: "+saved.name,()->{if(!a.layerEditable())return;Attributes attr=Attributes.decode(saved.payload);a.edit("Animation preset applied",()->{if(c!=null)attr.applyTo(c,Attributes.ANIMATION);else attr.applyTo(o,Attributes.ANIMATION);});});
+        a.inspector.addView(a.button("Save this animation as a preset",v->a.savePreset(PresetStore.ANIMATION,Attributes.ANIMATION)));
+    }
+    float[] currentValues(){EditProject.Clip c=a.clip();EditProject.Overlay o=a.overlay();
+        if(c!=null)return new float[]{c.x,c.y,c.scale,c.rotation,c.opacity,c.intensity,c.skewX,c.skewY,c.anchorX,c.anchorY};
+        return new float[]{o.x,o.y,o.scale,o.rotation,o.opacity,0,o.skewX,o.skewY,o.anchorX,o.anchorY};}
+    private void curvePanel(){
+        Motion m=a.selectedMotion();if(m==null)return;long t=motionTime(),tol=tolerance();Motion.Key first=null;for(int p=0;p<Motion.COUNT&&first==null;p++)first=Keyframes.keyAt(m,p,t,tol);
+        if(first==null){a.inspector.addView(a.note("Move the playhead onto a keyframe to edit its curve."));return;}
+        Motion.Key working=first.copy();
+        a.inspector.addView(a.note("Drag the two handles. The curve shapes the interval from this keyframe to the next, for every property keyed here."));
+        a.inspector.addView(a.new CurveView(working,()->{}),new LinearLayout.LayoutParams(-1,a.dp(200)));
+        a.inspector.addView(a.button("Apply curve",v->{if(a.layerEditable())a.edit("Custom easing applied",()->Keyframes.easeAll(m,t,tol,new float[]{working.x1,working.y1,working.x2,working.y2}));}));
+    }
+    // ---- Markers ------------------------------------------------------------------------------------
+    private void markersPanel(){
+        a.inspector.addView(a.note("Markers are snap targets for trims, moves, splits (move the playhead to a marker first) and keyframes. Shortcuts: M toggles a marker; , and . jump between markers."));
+        LinearLayout nav=a.row();nav.addView(a.button("‹ Previous marker",v->a.jumpMarker(false)),new LinearLayout.LayoutParams(0,a.dp(48),1));nav.addView(a.button("Next marker ›",v->a.jumpMarker(true)),new LinearLayout.LayoutParams(0,a.dp(48),1));a.inspector.addView(nav);
         a.inspector.addView(a.button("Add / remove marker at playhead",v->a.toggleMarker()));
+        a.inspector.addView(a.button("Detect beats from audio…",v->a.detectBeats()));
+        for(int i=0;i<a.project.markers.size();i++){final long time=a.project.markers.get(i);final int index=i;
+            timeField("Marker "+(i+1),time,value->a.edit("Marker moved",()->{a.project.markers.remove(index);if(a.project.markers.contains(value))return;a.project.markers.add(Math.max(0,value));Collections.sort(a.project.markers);}));}
+        if(!a.project.markers.isEmpty())a.inspector.addView(a.button("Clear all markers",v->{if(a.editable())a.edit("Markers cleared",()->a.project.markers.clear());}));
     }
     private void multiTools(){
         a.inspector.addView(a.note(a.multiCount()+" layers selected. They move and transform together."));

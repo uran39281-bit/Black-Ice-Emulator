@@ -100,6 +100,27 @@ public final class Keyframes {
             for(Iterator<Motion.Key> it=keys.iterator();it.hasNext();)if(it.next().timeMs<0){it.remove();dropped=true;}
             if(dropped&&(keys.isEmpty()||keys.get(0).timeMs>0))m.put(p,new Motion.Key(0,atCut));}
     }
+    public static final String[] PRESETS={"Fade In","Fade Out","Pop In","Slide In Left","Slide In Right","Spin"};
+    /** Built-in animation in the motion's time base between start and end; current values are the targets. */
+    public static void preset(Motion m,String name,long start,long end,float[] current) {
+        long length=Math.max(EditProject.MIN_CLIP_MS,end-start),intro=Math.min(600,length/2);
+        Motion check=m.copy();
+        switch(name){
+            case "Fade In":key(check,Motion.OPACITY,start,0,2);key(check,Motion.OPACITY,start+intro,current[Motion.OPACITY],2);break;
+            case "Fade Out":key(check,Motion.OPACITY,end-intro,current[Motion.OPACITY],1);key(check,Motion.OPACITY,end,0,1);break;
+            case "Pop In":key(check,Motion.SCALE,start,Math.max(.05f,current[Motion.SCALE]*.2f),2);key(check,Motion.SCALE,start+intro*2/3,Math.min(4,current[Motion.SCALE]*1.1f),3);key(check,Motion.SCALE,start+intro,current[Motion.SCALE],3);break;
+            case "Slide In Left":case "Slide In Right":key(check,Motion.X,start,name.endsWith("Left")?-2:2,2);key(check,Motion.X,start+intro,current[Motion.X],2);break;
+            case "Spin":key(check,Motion.ROTATION,start,current[Motion.ROTATION],3);key(check,Motion.ROTATION,end,Math.max(-3600,Math.min(3600,current[Motion.ROTATION]+360)),3);break;
+            default:throw new IllegalArgumentException("Unknown animation preset.");
+        }
+        check.validate();for(int p=0;p<Motion.COUNT;p++){m.curves.get(p).clear();m.curves.get(p).addAll(check.curves.get(p));}
+    }
+    private static void key(Motion m,int property,long time,float value,int easing){Motion.Key k=new Motion.Key(Math.max(0,time),value);ease(k,easing);m.put(property,k);}
+    /** Keys at the playhead (any property) moved to a new time together. */
+    public static int moveAll(Motion m,long from,long to,long tolerance){int moved=0;for(int p=0;p<Motion.COUNT;p++)if(keyAt(m,p,from,tolerance)!=null){move(m,p,from,to,tolerance);moved++;}if(moved==0)throw new IllegalArgumentException("No keyframe at the playhead.");return moved;}
+    public static int deleteAll(Motion m,long time,long tolerance){int removed=0;for(int p=0;p<Motion.COUNT;p++){Motion.Key k=keyAt(m,p,time,tolerance);if(k!=null){m.curves.get(p).remove(k);removed++;}}return removed;}
+    public static int easeAll(Motion m,long time,long tolerance,float[] curve){int changed=0;for(int p=0;p<Motion.COUNT;p++){Motion.Key k=keyAt(m,p,time,tolerance);if(k!=null){k.x1=curve[0];k.y1=curve[1];k.x2=curve[2];k.y2=curve[3];changed++;}}return changed;}
+    public static float[] curve(int preset){return CURVES[preset].clone();}
     /** Shifts every key (used when an animation preset is applied at a new start). */
     public static void shift(Motion m,long delta){for(List<Motion.Key> keys:m.curves)for(Motion.Key k:keys)k.timeMs+=delta;}
 }

@@ -34,4 +34,21 @@ public class KeyframesTest {
         Motion m=new Motion();try{Keyframes.set(m,Motion.SKEW_X,0,120,10);fail();}catch(IllegalArgumentException expected){}
         assertTrue(Motion.allowed(Motion.ANCHOR_X,-1.5f));assertFalse(Motion.allowed(Motion.ANCHOR_X,3));
     }
+    @Test public void presetsAnimateTowardCurrentValues() {
+        Motion m=new Motion();float[] current={.3f,0,1,0,.8f,.6f,0,0,0,0};
+        Keyframes.preset(m,"Fade In",1000,4000,current);assertEquals(0,m.value(Motion.OPACITY,1000,1),1e-6);assertEquals(.8f,m.value(Motion.OPACITY,1600,1),1e-6);
+        Keyframes.preset(m,"Slide In Left",1000,4000,current);assertEquals(-2,m.value(Motion.X,1000,0),1e-6);assertEquals(.3f,m.value(Motion.X,2000,0),1e-6);
+        Keyframes.preset(m,"Spin",1000,4000,current);assertEquals(360,m.value(Motion.ROTATION,4000,0),1e-6);
+        assertEquals("Opacity, X and rotation keys at 1.0 s",3,Keyframes.deleteAll(m,1000,5));assertEquals("Later slide key remains",.3f,m.value(Motion.X,1600,0),1e-6);
+    }
+    @Test public void keysAtPlayheadMoveAndEaseTogether() {
+        Motion m=new Motion();m.put(Motion.X,new Motion.Key(500,0));m.put(Motion.Y,new Motion.Key(500,1));m.put(Motion.X,new Motion.Key(2000,1));
+        assertEquals(2,Keyframes.moveAll(m,500,800,10));assertEquals(800,m.curves.get(Motion.Y).get(0).timeMs);
+        assertEquals(2,Keyframes.easeAll(m,800,10,Keyframes.curve(1)));assertEquals(1,Keyframes.easingOf(m.curves.get(Motion.X).get(0)));
+    }
+    @Test public void beatsAreSpacedLocalPeaks() {
+        float[] peaks=new float[64];for(int i=0;i<64;i++)peaks[i]=i%8==0?1f:.1f;
+        java.util.List<Long> beats=Beats.detect(peaks,6400,250);assertEquals(7,beats.size());assertEquals(850,(long)beats.get(0));
+        assertTrue(Beats.detect(peaks,6400,2000).size()<beats.size());assertTrue(Beats.detect(new float[3],1000,100).isEmpty());
+    }
 }

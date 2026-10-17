@@ -67,7 +67,9 @@ final class TimelineView extends View {
         drawRuler(canvas,left,right,height);
         EditProject p=a.project;List<EditProject.Placement> placements=p.placements();float bar=a.dp(BAR_DP);
         for(EditProject.Placement pl:placements){float y=rowTopOfTrackCached(rows,pl.clip.track);if(y<0)continue;float l=x(pl.startMs),r=x(pl.endMs);if(r<left||l>right||y+bar<top||y>bottom)continue;drawClip(canvas,pl,l,r,y+a.dp(3),bar,left,right);}
-        for(Row row:rows)if(row.kind==1)drawOverlay(canvas,row.index,row.top+a.dp(3),bar,left,right);
+        for(Row row:rows)if(row.kind==1){String g=a.project.overlays.get(row.index).group;
+            if(g!=null&&a.collapsedGroups.contains(g)){for(int i=0;i<a.project.overlays.size();i++)if(g.equals(a.project.overlays.get(i).group))drawOverlay(canvas,i,row.top+a.dp(3),bar,left,right);}
+            else drawOverlay(canvas,row.index,row.top+a.dp(3),bar,left,right);}
         Row musicRow=rows.get(rows.size()-1);
         if(p.music!=null){long end=p.music.loop?p.durationMs():Math.min(p.durationMs(),p.music.startMs+p.music.outMs-p.music.inMs);paint.setColor(0xFF277A79);canvas.drawRoundRect(x(p.music.startMs),musicRow.top+a.dp(8),x(end),musicRow.top+a.dp(40),a.dp(4),a.dp(4),paint);paint.setColor(EditorActivity.TEXT);paint.setTextSize(a.dp(11));canvas.drawText("♫  "+p.music.name,Math.max(x(p.music.startMs),left+headerWidth())+a.dp(6),musicRow.top+a.dp(29),paint);}
         if(operation!=0&&moved)drawDragPreview(canvas,rows,bar);
@@ -148,9 +150,11 @@ final class TimelineView extends View {
             int color=overlay?(o.imageUri==null?(o.color|0xFF000000):0xFF9FEAFF):t.color;
             if(r.kind==0&&r.index!=0||overlay){paint.setColor(EditorActivity.MUTED);for(int i=-1;i<=1;i++)canvas.drawRect(left+a.dp(7),mid+i*a.dp(5)-a.dp(.75f),left+a.dp(19),mid+i*a.dp(5)+a.dp(.75f),paint);}
             paint.setColor(color);canvas.drawRect(left+a.dp(24),y+a.dp(8),left+a.dp(27),y+a.dp(ROW_DP)-a.dp(8),paint);
+            Bitmap thumb=null;if(!overlay&&r.index<4)for(EditProject.Clip c:a.project.clips)if(c.track==r.index){thumb=a.thumbnails.get(c,a.timelineThumbnailsReady);break;}
+            float textLeft=a.dp(32);if(thumb!=null&&w>=a.dp(140)){thumbBounds.set(left+a.dp(31),y+a.dp(10),left+a.dp(31)+a.dp(32)*thumb.getWidth()/(float)thumb.getHeight()*.75f,y+a.dp(34));canvas.drawBitmap(thumb,null,thumbBounds,paint);textLeft=thumbBounds.right-left+a.dp(5);}
             paint.setColor(hidden?EditorActivity.MUTED:EditorActivity.TEXT);paint.setTextSize(a.dp(11));paint.setTypeface(Typeface.DEFAULT_BOLD);
-            String name=overlay?o.label():t.name;canvas.save();canvas.clipRect(left+a.dp(31),y,left+w-a.dp(48),y+a.dp(ROW_DP));canvas.drawText(name,left+a.dp(32),mid-a.dp(2),paint);canvas.restore();paint.setTypeface(Typeface.DEFAULT);
-            paint.setTextSize(a.dp(9));paint.setColor(EditorActivity.MUTED);canvas.drawText(overlay?(o.imageUri!=null?"image":o.shape>0?"shape":"text"):r.index==0?"main":audio?"audio":"video",left+a.dp(32),mid+a.dp(12),paint);
+            String name=a.rowName(new int[]{r.kind,r.index});canvas.save();canvas.clipRect(left+textLeft,y,left+w-a.dp(48),y+a.dp(ROW_DP));canvas.drawText(name,left+textLeft,mid-a.dp(2),paint);canvas.restore();paint.setTypeface(Typeface.DEFAULT);
+            paint.setTextSize(a.dp(9));paint.setColor(EditorActivity.MUTED);canvas.drawText(overlay?(o.group!=null&&a.collapsedGroups.contains(o.group)?"group":o.imageUri!=null?"image":o.shape>0?"shape":"text"):r.index==0?"main":audio?"audio":"video",left+textLeft,mid+a.dp(12),paint);
             if(solo){paint.setColor(0xFFFFC145);canvas.drawText("S",left+a.dp(80),mid+a.dp(12),paint);}
             drawIcon(canvas,audio?(hidden?"Mute":"Volume"):hidden?"Hidden":"Eye",left+w-a.dp(46),mid-a.dp(10),hidden?EditorActivity.MUTED:EditorActivity.TEXT);
             drawIcon(canvas,locked?"Lock":"Unlock",left+w-a.dp(23),mid-a.dp(10),locked?EditorActivity.CYAN:EditorActivity.MUTED);
